@@ -1,0 +1,40 @@
+name: Module - Linting
+on: workflow_call
+
+jobs:
+  pre-commit:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Run code linters (pre-commit)
+      uses: pre-commit/action@v3.0.1
+
+    - name: Validate PR Commits Format
+      if: github.event_name == 'pull_request'
+      run: |
+        git log --format="%s" ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }} > commits.txt
+        echo "Validating commits:"
+        cat commits.txt
+        invalid_commits=$(grep -vE "^\[(ADD|FIX|UPDATE|REMOVE|DOC|REFACTOR|TEST|CI|CONFIG|MERGE|WORK|WIP)\] " commits.txt || true)
+        if [ ! -z "$invalid_commits" ]; then
+          echo "::error::Invalid commit messages found:"
+          echo "$invalid_commits"
+          echo "Expected format: [TYPE] Message in English"
+          exit 1
+        fi
+
+    - name: Validate PR Title Format
+      if: github.event_name == 'pull_request'
+      run: |
+        if ! echo "${{ github.event.pull_request.title }}" | grep -qE "^\[(ADD|FIX|UPDATE|REMOVE|DOC|REFACTOR|TEST|CI|CONFIG|MERGE|WORK|WIP)\] "; then
+          echo "::error::Invalid PR title. Expected format: [TYPE] Message in English"
+          exit 1
+        fi

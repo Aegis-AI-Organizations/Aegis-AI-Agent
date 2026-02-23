@@ -1,0 +1,59 @@
+name: Module - Auto Release
+on: workflow_call
+
+jobs:
+  create_release:
+    name: GitHub Auto-Release & Docker Push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Generate Auto Tag
+        id: tag_gen
+        run: echo "tag=v1.0.${{ github.run_number }}" >> $GITHUB_OUTPUT
+
+      - name: Check for Dockerfile
+        id: docker_check
+        run: |
+          if [ -f Dockerfile ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "No Dockerfile found, skipping Docker build & push."
+          fi
+
+      - name: Log in to the Container registry
+        if: steps.docker_check.outputs.exists == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for Docker
+        if: steps.docker_check.outputs.exists == 'true'
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: type=raw,value=${{ steps.tag_gen.outputs.tag }},enable=true
+
+      - name: Build and push Docker image
+        if: steps.docker_check.outputs.exists == 'true'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/${{ github.repository }}:${{ steps.tag_gen.outputs.tag }},ghcr.io/${{ github.repository }}:latest
+          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.tag_gen.outputs.tag }}
+          name: Release ${{ steps.tag_gen.outputs.tag }}
+          generate_release_notes: true

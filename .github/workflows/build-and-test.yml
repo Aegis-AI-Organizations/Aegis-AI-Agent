@@ -1,0 +1,14 @@
+name: Module - Build & Test
+on: workflow_call
+
+jobs:
+  build_and_test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Build
+        run: if [ -f Cargo.toml ]; then cargo build --verbose; else echo "No Cargo.toml, skipping"; fi
+      - name: Run tests
+        run: if [ -f Cargo.toml ]; then cargo test --verbose; else echo "No Cargo.toml, skipping"; fi
