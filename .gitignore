@@ -1,3 +1,16 @@
 /target
 **/*.rs.bk
 .env
+```ignore
+Cargo.lock
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+```
