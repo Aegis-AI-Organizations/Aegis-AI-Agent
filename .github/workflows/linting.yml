@@ -14,6 +14,18 @@ jobs:
       with:
         python-version: '3.11'
 
+    - name: Set up Go
+      if: hashFiles('go.mod') != ''
+      uses: actions/setup-go@v5
+      with:
+        go-version: 'stable'
+
+    - name: Install System Dependencies (golangci-lint)
+      run: |
+        if [ -f "go.mod" ]; then
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b /usr/local/bin latest
+        fi
+
     - name: Run code linters (pre-commit)
       uses: pre-commit/action@v3.0.1
 
