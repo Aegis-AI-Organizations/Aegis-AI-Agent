@@ -12,6 +12,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Prepare Lowercase Image Name
+        id: prep
+        run: |
+          REPO_LOWER="${GITHUB_REPOSITORY,,}"
+          echo "image_name=ghcr.io/${REPO_LOWER}" >> $GITHUB_OUTPUT
+
       - name: Generate Auto Tag
         id: tag_gen
         run: echo "tag=v1.0.${{ github.run_number }}" >> $GITHUB_OUTPUT
@@ -39,7 +45,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository }}
+          images: ${{ steps.prep.outputs.image_name }}
           tags: type=raw,value=${{ steps.tag_gen.outputs.tag }},enable=true
 
       - name: Build and push Docker image
@@ -48,11 +54,13 @@ jobs:
         with:
           context: .
           push: true
-          tags: ghcr.io/${{ github.repository }}:${{ steps.tag_gen.outputs.tag }},ghcr.io/${{ github.repository }}:latest
+          tags: |
+            ${{ steps.prep.outputs.image_name }}:${{ steps.tag_gen.outputs.tag }}
+            ${{ steps.prep.outputs.image_name }}:latest
           labels: ${{ steps.meta.outputs.labels }}
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag_gen.outputs.tag }}
           name: Release ${{ steps.tag_gen.outputs.tag }}
