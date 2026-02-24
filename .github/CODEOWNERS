@@ -1,1 +1,15 @@
-* @enzogaggiotti
+.dockerignore @enzogaggiotti
+Dockerfile @enzogaggiotti
+
+.github @enzogaggiotti
+.pre-commit-config.yaml @enzogaggiotti
+.gitignore @enzogaggiotti
+
+LICENSE @enzogaggiotti
+README.md @enzogaggiotti
+docs @enzogaggiotti
+
+Cargo.lock @enzogaggiotti
+Cargo.toml @enzogaggiotti
+src @enzogaggiotti
+target @enzogaggiotti
