@@ -1,18 +1,19 @@
-# Optimized Dockerfile for Rust project
 # Stage 1: Build dependencies and binary
-FROM rust:1.76-alpine AS builder
+# Upgrade to 1.85-alpine to support newer Rust editions
+FROM rust:1.85-alpine AS builder
 # Install musl tools for static compilation
 RUN apk add --no-cache musl-dev
 WORKDIR /app
-# Copy the source codeExpand commentComment on line R7Resolved
+# Copy the source code (Cleaned from review comments)
 COPY . .
-# Build release binary (statically linked for musl) and install to /usr/local/cargo/bin/
-RUN cargo install --path . --root /usr/local/ || echo "Build failed or no Cargo.toml"Expand commentComment on line R10Resolved
+# Build release binary
+RUN cargo install --path . --root /usr/local/
 
 # Stage 2: Minimal Runtime
 FROM alpine:3.19
 RUN apk add --no-cache ca-certificates
-# Copy only the compiled binary
-COPY --from=builder /usr/local/bin/* /usr/local/bin/Expand commentComment on line R16Resolved
-# Replace 'app' with the exact name of your binary
-CMD ["app"]
+# Copy only the compiled binary (Cleaned from review comments)
+# NOTE: Replace 'aegis-ai-agent' if your binary has a different name
+COPY --from=builder /usr/local/bin/aegis-ai-agent /usr/local/bin/aegis-ai-agent
+# Set the command to run your binary
+CMD ["aegis-ai-agent"]
