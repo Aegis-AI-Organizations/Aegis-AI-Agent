@@ -8,10 +8,15 @@ pub fn init_agent() {
 
 #[cfg(test)]
 mod tests {
-    use super::startup_message;
+    use super::{init_agent, startup_message};
 
     #[test]
     fn startup_message_matches_expected_banner() {
         assert_eq!(startup_message(), "Aegis AI Agent initialized.");
+    }
+
+    #[test]
+    fn init_agent_executes_without_panic() {
+        init_agent();
     }
 }
