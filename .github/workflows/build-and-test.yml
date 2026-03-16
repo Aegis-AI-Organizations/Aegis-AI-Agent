@@ -10,5 +10,11 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
       - name: Build
         run: if [ -f Cargo.toml ]; then cargo build --verbose; else echo "No Cargo.toml, skipping"; fi
-      - name: Run tests
-        run: if [ -f Cargo.toml ]; then cargo test --verbose; else echo "No Cargo.toml, skipping"; fi
+      - name: Run tests with coverage
+        run: |
+          if [ -f Cargo.toml ]; then
+            cargo install cargo-tarpaulin
+            cargo tarpaulin --verbose --fail-under 80
+          else
+            echo "No Cargo.toml, skipping"
+          fi
