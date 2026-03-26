@@ -1,0 +1,20 @@
+name: Docs Sync Trigger
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'docs/**'
+      - 'README.md'
+
+jobs:
+  trigger-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Aegis-Documentation Rebuild
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.PROTO_SYNC_TOKEN }}
+          repository: Aegis-AI-Organizations/Aegis-Documentation
+          event-type: docs_updated
