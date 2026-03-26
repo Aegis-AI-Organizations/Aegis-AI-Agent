@@ -15,6 +15,6 @@ jobs:
       - name: Trigger Aegis-Documentation Rebuild
         uses: peter-evans/repository-dispatch@v3
         with:
-          token: ${{ secrets.PROTO_SYNC_TOKEN }}
+          token: ${{ secrets.ORG_PAT }}
           repository: Aegis-AI-Organizations/Aegis-Documentation
           event-type: docs_updated
