@@ -91,8 +91,14 @@ async fn test_run_server() {
 
 #[tokio::test]
 async fn test_run_failure() {
+    // Set specific env vars for this test to avoid leakage
+    unsafe {
+        env::set_var("HEALTH_BIND_ADDR", "127.0.0.1");
+        env::set_var("HEALTH_PORT", "18081");
+    }
+
     // 1. Bind to the port first to ensure run() fails to bind
-    let _socket = std::net::TcpListener::bind("0.0.0.0:8081").unwrap();
+    let _socket = std::net::TcpListener::bind("127.0.0.1:18081").unwrap();
 
     // 2. Call run() and expect it to fail
     let result = aegis_ai_agent::run().await;
