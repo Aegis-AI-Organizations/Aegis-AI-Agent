@@ -21,6 +21,7 @@ async fn test_health_handler_ingest_ok() {
         .await;
 
     unsafe {
+        env::remove_var("INGEST_HEALTH_URL");
         env::set_var("INGEST_HOST", &host);
         env::set_var("INGEST_PORT", &port);
     }
@@ -47,6 +48,7 @@ async fn test_health_handler_ingest_fail() {
         .await;
 
     unsafe {
+        env::remove_var("INGEST_HEALTH_URL");
         env::set_var("INGEST_HOST", &host);
         env::set_var("INGEST_PORT", &port);
     }
@@ -59,6 +61,7 @@ async fn test_health_handler_ingest_fail() {
 async fn test_health_handler_ingest_timeout() {
     // Set a port where nothing is listening to trigger an error in reqwest
     unsafe {
+        env::remove_var("INGEST_HEALTH_URL");
         env::set_var("INGEST_HOST", "127.0.0.1");
         env::set_var("INGEST_PORT", "1"); // Hopefully nothing is on port 1
     }

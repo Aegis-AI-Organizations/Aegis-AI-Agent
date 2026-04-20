@@ -27,9 +27,9 @@ graph LR
 
 | Component | Technology | Version |
 |---|---|---|
-| Language | **Rust** | 1.75+ |
+| Language | **Rust** | 1.85+ |
 | Async Runtime | **Tokio** | 1.x |
-| Transport | **gRPC (Tonic)** | 0.x |
+| Transport | **TLS-encrypted outbound streaming** | Implementation-defined |
 | Performance | < 20MB RSS | — |
 
 ---
@@ -39,7 +39,8 @@ graph LR
 - **Mutual TLS**: The Agent **requires** a valid client certificate to speak to the Ingest layer. No exceptions.
 - **Zero-Privilege**: Designed to run as a non-root User/Group.
 - **Static Binary**: Compiled into a single, dependency-free binary to reduce the attack surface.
-- **No Inbound**: The Agent never opens listening ports; it only performs outbound streaming.
+- **Outbound Telemetry + Health Endpoint**: Telemetry delivery is outbound over TLS. The agent also exposes an HTTP health endpoint on port `8081` by default for liveness/readiness checks.
+- **Constrained Exposure by Default**: The health server binds to `127.0.0.1` unless overridden with `HEALTH_BIND_ADDR`.
 
 ---
 
