@@ -1,35 +1,76 @@
-# 🛡️ Aegis AI - Agent
+# 🦀 Aegis AI — Infrastructure Agent
 
 **Project ID:** AEGIS-CORE-2026
 
-## 🏗️ System Architecture & Role
-The **Aegis AI Agent** is the edge collection module deployed directly within the **Client Infrastructure (Target)**. It acts as the primary sensor, securely capturing logs and telemetry in real-time, and securely streaming them to the Aegis Core Cloud.
+> The **Aegis AI Agent** is the high-performance collection sensor deployed within target environments. Written in **Rust**, it captures real-time telemetry and securely streams it to the Aegis Ingest workers via **mTLS-encrypted gRPC** channels.
 
-* **Tech Stack:** Rust (Tokio for Async, Tonic for gRPC)
-* **Performance SLO:**
-  * CPU Usage < 10% (Single Core)
-  * Memory Usage < 2GiB (RSS)
-  * Ingestion Throughput: 10,000 Events/Sec (EPS)
-* **Architecture Justification:** Zero Garbage Collection delays, minimal static binary footprint (< 10MB), and absolute Memory Safety guarantee.
+---
 
-## 🔐 Security & DevSecOps Mandates
-* **No Plain-Text Secrets:** Passwords and keys exist only in memory, injected dynamically via Infisical/HashiCorp Vault (`tmpfs`). The use of `.env` files is STRICTLY FORBIDDEN.
-* **Network Communication:** The Agent pushes data over a secure **gRPC (HTTP/2) Stream** encapsulated in strict **mTLS**. Relying on "Deny-All" default external policies.
+## 🏗️ Role in the Ecosystem
 
-## 🐳 Docker Deployment
-The Agent is packaged as an immutable Docker image, intended to be deployed as a DaemonSet or sidecar agent within client clusters.
+The Agent acts as the platform's "Eyes and Ears" on the ground. It is designed for minimal resource footprint and maximum reliability.
+
+- **Real-time Telemetry**: Streams logs, metrics, and process events with microsecond latency.
+- **Secure Tunneling**: Establishes a hardened outbound-only connection to the Aegis Core.
+- **Auto-Discovery**: Identifies running containers and services within the local namespace.
+
+```mermaid
+graph LR
+    Target[Target Apps] -- "Logs/Trace" --> Agent[Aegis Agent (Rust)]
+    Agent -- "gRPC / mTLS" --> Nginx[Nginx Ingress]
+    Nginx -- "Batch Write" --> Ingest[Ingest Worker]
+```
+
+---
+
+## 🛠️ Tech Stack & Performance
+
+| Component | Technology | Version |
+|---|---|---|
+| Language | **Rust** | 1.75+ |
+| Async Runtime | **Tokio** | 1.x |
+| Transport | **gRPC (Tonic)** | 0.x |
+| Performance | < 20MB RSS | — |
+
+---
+
+## 🔐 Security & DevSecOps
+
+- **Mutual TLS**: The Agent **requires** a valid client certificate to speak to the Ingest layer. No exceptions.
+- **Zero-Privilege**: Designed to run as a non-root User/Group.
+- **Static Binary**: Compiled into a single, dependency-free binary to reduce the attack surface.
+- **No Inbound**: The Agent never opens listening ports; it only performs outbound streaming.
+
+---
+
+## 🐳 Deployment (Docker)
 
 ```bash
 docker pull ghcr.io/aegis-ai/aegis-agent:latest
 
-# Deployment wrapped with dynamic secret injection
-infisical run --env=prod -- docker run -d \
+# Run as a unprivileged container
+docker run -d \
   --name aegis-agent \
   --read-only \
   --cap-drop=ALL \
-  --security-opt no-new-privileges:true \
-  --user 10001:10001 \
-  -e INFISICAL_TOKEN=$INFISICAL_TOKEN \
-  -v /var/log/client:/var/log/client:ro \
+  --user 1000:1000 \
+  -e INGEST_HOST="ingest.aegis.ai:443" \
+  -v /etc/aegis/certs:/etc/certs:ro \
   ghcr.io/aegis-ai/aegis-agent:latest
 ```
+
+---
+
+## 🛠️ Development
+
+```bash
+# Build the binary
+cargo build --release
+
+# Run unit tests
+cargo test
+```
+
+---
+
+*Aegis AI — Telemetry & Collection — 2026*
