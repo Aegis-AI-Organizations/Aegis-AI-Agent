@@ -3,7 +3,9 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 
-pub const AGENT_SECRET_FILE: &str = ".agent_secret";
+pub fn get_agent_secret_file() -> String {
+    std::env::var("AGENT_SECRET_FILE_OVERRIDE").unwrap_or_else(|_| ".agent_secret".to_string())
+}
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct AgentConfig {
@@ -12,9 +14,9 @@ pub struct AgentConfig {
 }
 
 pub fn load_local_config() -> Result<Option<AgentConfig>> {
-    if Path::new(AGENT_SECRET_FILE).exists() {
-        let content =
-            fs::read_to_string(AGENT_SECRET_FILE).context("Failed to read agent secret file")?;
+    let path = get_agent_secret_file();
+    if Path::new(&path).exists() {
+        let content = fs::read_to_string(&path).context("Failed to read agent secret file")?;
         let config: AgentConfig =
             serde_json::from_str(&content).context("Failed to parse agent secret file")?;
         return Ok(Some(config));
@@ -24,6 +26,7 @@ pub fn load_local_config() -> Result<Option<AgentConfig>> {
 
 pub fn save_config(config: &AgentConfig) -> Result<()> {
     let config_json = serde_json::to_string(config)?;
+    let path = get_agent_secret_file();
 
     #[cfg(unix)]
     {
@@ -35,7 +38,7 @@ pub fn save_config(config: &AgentConfig) -> Result<()> {
             .create(true)
             .truncate(true)
             .mode(0o600)
-            .open(AGENT_SECRET_FILE)
+            .open(&path)
             .context("Failed to create agent secret file with restricted permissions")?;
 
         use std::io::Write;
@@ -45,7 +48,7 @@ pub fn save_config(config: &AgentConfig) -> Result<()> {
 
     #[cfg(not(unix))]
     {
-        fs::write(AGENT_SECRET_FILE, config_json).context("Failed to write agent secret file")?;
+        fs::write(&path, config_json).context("Failed to write agent secret file")?;
     }
 
     Ok(())
@@ -68,7 +71,6 @@ mod tests {
     use super::*;
     use serial_test::serial;
     use std::env;
-    use std::fs;
 
     #[test]
     #[serial]
@@ -116,24 +118,34 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_save_and_load_config() {
         let temp_dir = tempfile::tempdir().unwrap();
         let config_path = temp_dir.path().join(".agent_secret_test");
+        let config_path_str = config_path.to_str().unwrap();
+
+        unsafe {
+            env::set_var("AGENT_SECRET_FILE_OVERRIDE", config_path_str);
+        }
 
         let config = AgentConfig {
             agent_id: "test-id".to_string(),
             agent_secret: "test-secret".to_string(),
         };
 
-        // We can't easily change AGENT_SECRET_FILE constant but we can test the serialization/deserialization
-        // and a custom file save if we had it. Since we don't want to change the code too much:
-        let config_json = serde_json::to_string(&config).unwrap();
-        fs::write(&config_path, config_json).unwrap();
+        // Test save
+        save_config(&config).expect("save_config failed");
 
-        let content = fs::read_to_string(&config_path).unwrap();
-        let loaded: AgentConfig = serde_json::from_str(&content).unwrap();
+        // Test load
+        let loaded = load_local_config()
+            .expect("load_local_config failed")
+            .expect("Config not found");
 
         assert_eq!(loaded.agent_id, "test-id");
         assert_eq!(loaded.agent_secret, "test-secret");
+
+        unsafe {
+            env::remove_var("AGENT_SECRET_FILE_OVERRIDE");
+        }
     }
 }
