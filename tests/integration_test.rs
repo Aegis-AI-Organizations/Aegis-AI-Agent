@@ -1,14 +1,16 @@
-use aegis_ai_agent::create_app;
+use aegis_ai_agent::server::create_router;
 use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
+use serial_test::serial;
 use std::env;
 use tower::ServiceExt; // for `oneshot` and `ready`
 
 #[tokio::test]
+#[serial]
 async fn test_health_endpoint_integration() {
-    let app = create_app();
+    let app = create_router();
 
     // Mock Ingest to avoid flake
     let mut server = mockito::Server::new_async().await;
@@ -27,6 +29,7 @@ async fn test_health_endpoint_integration() {
         .await;
 
     unsafe {
+        env::remove_var("INGEST_HEALTH_URL");
         env::set_var("INGEST_HOST", &host);
         env::set_var("INGEST_PORT", &port);
     }
@@ -46,7 +49,7 @@ async fn test_health_endpoint_integration() {
 
 #[tokio::test]
 async fn test_not_found_integration() {
-    let app = create_app();
+    let app = create_router();
 
     let response = app
         .oneshot(
@@ -69,19 +72,22 @@ fn test_startup_banner() {
     );
 }
 
-#[test]
-fn test_prepare_run() {
-    let _app = aegis_ai_agent::prepare_run();
+#[tokio::test]
+#[serial]
+async fn test_prepare_run() {
+    unsafe {
+        env::set_var("SKIP_AGENT_INIT", "1");
+    }
+    let _addr = aegis_ai_agent::prepare_run().await.unwrap();
 }
 
 #[tokio::test]
 async fn test_run_server() {
-    let app = create_app();
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr: std::net::SocketAddr = "127.0.0.1:0".parse().unwrap();
 
     // Spawn server in background
     let handle = tokio::spawn(async move {
-        aegis_ai_agent::run_server(listener, app).await.unwrap();
+        aegis_ai_agent::server::start_server(addr).await.unwrap();
     });
 
     // Let it start, then abort
@@ -90,18 +96,40 @@ async fn test_run_server() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_run_failure() {
-    // 1. Bind to the port first to ensure run() fails to bind
-    let _socket = std::net::TcpListener::bind("0.0.0.0:8081").unwrap();
+    // Set specific env vars for this test to avoid leakage
+    unsafe {
+        env::set_var("SKIP_AGENT_INIT", "1");
+        env::set_var("HEALTH_BIND_ADDR", "127.0.0.1");
+        env::set_var("HEALTH_PORT", "18081");
+    }
 
-    // 2. Call run() and expect it to fail
+    // 1. Bind to the port first to ensure run() fails to bind
+    let _socket = std::net::TcpListener::bind("127.0.0.1:18081").unwrap();
+
+    // 2. Call run() and expect it to fail with a bind error
     let result = aegis_ai_agent::run().await;
-    assert!(result.is_err());
+    match result {
+        Err(e) => {
+            let err_msg = e.to_string().to_lowercase();
+            assert!(
+                err_msg.contains("address already in use") || err_msg.contains("failed to bind"),
+                "Expected bind failure, got: {}",
+                e
+            );
+        }
+        Ok(_) => panic!("Expected run() to fail due to port collision"),
+    }
 }
 
-#[test]
-fn test_agent_init() {
-    aegis_ai_agent::agent::init_agent();
+#[tokio::test]
+#[serial]
+async fn test_agent_init() {
+    unsafe {
+        env::set_var("SKIP_AGENT_INIT", "1");
+    }
+    aegis_ai_agent::agent::init_agent().await.unwrap();
 }
 
 #[tokio::test]
@@ -111,7 +139,9 @@ async fn test_binary_startup() {
 
     // Attempt to run the binary.
     // We assume it's already built by the current test run.
-    let mut child = Command::new("target/debug/aegis-ai-agent")
+    let binary_path = env!("CARGO_BIN_EXE_aegis-ai-agent");
+    let child = Command::new(binary_path)
+        .env("SKIP_AGENT_INIT", "1")
         .stdout(Stdio::piped())
         .spawn();
 
