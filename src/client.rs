@@ -86,3 +86,69 @@ impl AegisClient {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mockito;
+
+    #[tokio::test]
+    async fn test_register_success() {
+        let mut server = mockito::Server::new_async().await;
+        let url = server.url();
+
+        let _m = server
+            .mock("POST", "/api/agents/register")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"agent_id": "123", "agent_secret": "abc"}"#)
+            .create_async()
+            .await;
+
+        let client = AegisClient::new(url);
+        let config = client.register("token", "agent-01".to_string()).await.unwrap();
+
+        assert_eq!(config.agent_id, "123");
+        assert_eq!(config.agent_secret, "abc");
+    }
+
+    #[tokio::test]
+    async fn test_register_failure() {
+        let mut server = mockito::Server::new_async().await;
+        let url = server.url();
+
+        let _m = server
+            .mock("POST", "/api/agents/register")
+            .with_status(401)
+            .with_body("Unauthorized")
+            .create_async()
+            .await;
+
+        let client = AegisClient::new(url);
+        let result = client.register("token", "agent-01".to_string()).await;
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("401"));
+    }
+
+    #[tokio::test]
+    async fn test_heartbeat_success() {
+        let mut server = mockito::Server::new_async().await;
+        let url = server.url();
+
+        let _m = server
+            .mock("POST", "/api/agents/123/status")
+            .with_status(200)
+            .create_async()
+            .await;
+
+        let client = AegisClient::new(url);
+        let config = AgentConfig {
+            agent_id: "123".to_string(),
+            agent_secret: "abc".to_string(),
+        };
+
+        let result = client.send_heartbeat(&config).await;
+        assert!(result.is_ok());
+    }
+}
