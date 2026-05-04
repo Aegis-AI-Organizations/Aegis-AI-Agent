@@ -115,7 +115,8 @@ async fn test_run_failure() {
             let err_msg = e.to_string().to_lowercase();
             assert!(
                 err_msg.contains("address already in use") || err_msg.contains("failed to bind"),
-                "Expected bind failure, got: {}", e
+                "Expected bind failure, got: {}",
+                e
             );
         }
         Ok(_) => panic!("Expected run() to fail due to port collision"),

@@ -1,7 +1,6 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 
 pub const AGENT_SECRET_FILE: &str = ".agent_secret";
@@ -38,7 +37,7 @@ pub fn save_config(config: &AgentConfig) -> Result<()> {
             .mode(0o600)
             .open(AGENT_SECRET_FILE)
             .context("Failed to create agent secret file with restricted permissions")?;
-        
+
         use std::io::Write;
         file.write_all(config_json.as_bytes())
             .context("Failed to write to agent secret file")?;
