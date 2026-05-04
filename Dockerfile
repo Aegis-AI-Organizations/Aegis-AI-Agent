@@ -1,17 +1,16 @@
-# Optimized Dockerfile for Rust project
-# Stage 1: Build dependencies and binary
+# Stage 1: Build binary
 FROM rust:1.85-alpine AS builder
-# Install musl tools for static compilation
-RUN apk add --no-cache musl-dev
+RUN apk add --no-cache musl-dev ca-certificates
 WORKDIR /app
-# Copy the source code
 COPY . .
-# Build release binary (statically linked for musl) and install to /usr/local/cargo/bin/
-RUN cargo install --path . --root /usr/local/
+RUN cargo build --release --target x86_64-unknown-linux-musl
 
-# Stage 2: Minimal Runtime
-FROM alpine:3.19
-RUN apk add --no-cache ca-certificates
-# Copy only the compiled binary
-COPY --from=builder /usr/local/bin/aegis-ai-agent /usr/local/bin/aegis-ai-agent
-CMD ["/usr/local/bin/aegis-ai-agent"]
+# Stage 2: Ultra-secure Minimal Runtime
+FROM scratch
+# Copy CA certificates for HTTPS requests
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+# Copy the compiled static binary
+COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/aegis-ai-agent /aegis-ai-agent
+# Run as non-privileged is handled by the orchestrator/systemd, 
+# but entrypoint is set to the binary
+ENTRYPOINT ["/aegis-ai-agent"]

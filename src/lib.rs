@@ -4,14 +4,16 @@ pub mod health;
 use axum::{Router, routing::get};
 
 pub fn create_app() -> Router {
-    Router::new().route("/admin/system/health", get(health::health_handler))
+    Router::new()
+        .route("/health", get(health::health_handler))
+        .route("/admin/system/health", get(health::health_handler))
 }
 
 pub fn startup_banner() -> &'static str {
     "Hello, world! Aegis AI Agent is starting..."
 }
 
-pub fn prepare_run() -> Router {
+pub async fn prepare_run() -> Result<Router, Box<dyn std::error::Error>> {
     let load_dotenv = cfg!(debug_assertions)
         || std::env::var("LOAD_DOTENV")
             .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
@@ -22,10 +24,10 @@ pub fn prepare_run() -> Router {
     println!("{}", startup_banner());
 
     // 1. Initialize Agent logic
-    agent::init_agent();
+    agent::init_agent().await?;
 
     // 2. Build Axum router
-    create_app()
+    Ok(create_app())
 }
 
 pub async fn run_server(
@@ -37,7 +39,7 @@ pub async fn run_server(
 }
 
 pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
-    let app = prepare_run();
+    let app = prepare_run().await?;
     let bind_addr = std::env::var("HEALTH_BIND_ADDR").unwrap_or_else(|_| "127.0.0.1".to_string());
     let port = std::env::var("HEALTH_PORT")
         .ok()

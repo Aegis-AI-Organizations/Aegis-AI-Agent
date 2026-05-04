@@ -69,9 +69,12 @@ fn test_startup_banner() {
     );
 }
 
-#[test]
-fn test_prepare_run() {
-    let _app = aegis_ai_agent::prepare_run();
+#[tokio::test]
+async fn test_prepare_run() {
+    unsafe {
+        env::set_var("SKIP_AGENT_INIT", "1");
+    }
+    let _app = aegis_ai_agent::prepare_run().await.unwrap();
 }
 
 #[tokio::test]
@@ -105,9 +108,12 @@ async fn test_run_failure() {
     assert!(result.is_err());
 }
 
-#[test]
-fn test_agent_init() {
-    aegis_ai_agent::agent::init_agent();
+#[tokio::test]
+async fn test_agent_init() {
+    unsafe {
+        env::set_var("SKIP_AGENT_INIT", "1");
+    }
+    aegis_ai_agent::agent::init_agent().await.unwrap();
 }
 
 #[tokio::test]
@@ -117,7 +123,8 @@ async fn test_binary_startup() {
 
     // Attempt to run the binary.
     // We assume it's already built by the current test run.
-    let mut child = Command::new("target/debug/aegis-ai-agent")
+    let child = Command::new("target/debug/aegis-ai-agent")
+        .env("SKIP_AGENT_INIT", "1")
         .stdout(Stdio::piped())
         .spawn();
 
