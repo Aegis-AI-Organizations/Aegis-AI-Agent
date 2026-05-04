@@ -122,7 +122,8 @@ async fn test_binary_startup() {
 
     // Attempt to run the binary.
     // We assume it's already built by the current test run.
-    let child = Command::new("target/debug/aegis-ai-agent")
+    let binary_path = env!("CARGO_BIN_EXE_aegis-ai-agent");
+    let child = Command::new(binary_path)
         .env("SKIP_AGENT_INIT", "1")
         .stdout(Stdio::piped())
         .spawn();
