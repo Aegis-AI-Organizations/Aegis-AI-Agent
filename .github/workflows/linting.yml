@@ -20,11 +20,6 @@ jobs:
       with:
         go-version: 'stable'
 
-    - name: Install System Dependencies (golangci-lint)
-      run: |
-        if [ -f "go.mod" ]; then
-          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b /usr/local/bin latest
-        fi
 
     - name: Run code linters (pre-commit)
       uses: pre-commit/action@v3.0.1
@@ -35,7 +30,7 @@ jobs:
         git log --format="%s" ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }} > commits.txt
         echo "Validating commits:"
         cat commits.txt
-        invalid_commits=$(grep -vE "^\[(ADD|FIX|UPDATE|REMOVE|DOC|REFACTOR|TEST|CI|CONFIG|MERGE|WORK|WIP)\] " commits.txt || true)
+        invalid_commits=$(grep -vE "^\[(ADD|FIX|UPDATE|REMOVE|DOC|REFACTOR|TEST|CI|CONFIG|MERGE|WORK|WIP|REBASE)\] " commits.txt || true)
         if [ ! -z "$invalid_commits" ]; then
           echo "::error::Invalid commit messages found:"
           echo "$invalid_commits"
@@ -46,7 +41,7 @@ jobs:
     - name: Validate PR Title Format
       if: github.event_name == 'pull_request'
       run: |
-        if ! echo "${{ github.event.pull_request.title }}" | grep -qE "^\[(ADD|FIX|UPDATE|REMOVE|DOC|REFACTOR|TEST|CI|CONFIG|MERGE|WORK|WIP)\] "; then
+        if ! echo "${{ github.event.pull_request.title }}" | grep -qE "^\[(ADD|FIX|UPDATE|REMOVE|DOC|REFACTOR|TEST|CI|CONFIG|MERGE|WORK|WIP|REBASE)\] "; then
           echo "::error::Invalid PR title. Expected format: [TYPE] Message in English"
           exit 1
         fi

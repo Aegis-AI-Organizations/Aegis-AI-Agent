@@ -1,22 +1,65 @@
+use crate::client::AegisClient;
+use crate::config::{self, AgentConfig};
+use anyhow::{Context, Result};
+use std::time::Duration;
+use tokio::time;
+
 pub fn startup_message() -> &'static str {
     "Aegis AI Agent initialized."
 }
 
-pub fn init_agent() {
+pub async fn init_agent() -> Result<()> {
     println!("{}", startup_message());
-}
 
-#[cfg(test)]
-mod tests {
-    use super::{init_agent, startup_message};
-
-    #[test]
-    fn startup_message_matches_expected_banner() {
-        assert_eq!(startup_message(), "Aegis AI Agent initialized.");
+    if std::env::var("SKIP_AGENT_INIT")
+        .map(|v| v == "1")
+        .unwrap_or(false)
+    {
+        println!("Skipping agent initialization (SKIP_AGENT_INIT=1)");
+        return Ok(());
     }
 
-    #[test]
-    fn init_agent_executes_without_panic() {
-        init_agent();
+    let config = load_or_register_agent().await?;
+    println!("Agent registered/loaded with ID: {}", config.agent_id);
+
+    // Start heartbeat in background
+    tokio::spawn(async move {
+        if let Err(e) = start_heartbeat_loop(config).await {
+            eprintln!("Heartbeat error: {}", e);
+        }
+    });
+
+    Ok(())
+}
+
+async fn load_or_register_agent() -> Result<AgentConfig> {
+    if let Some(config) = config::load_local_config()? {
+        return Ok(config);
+    }
+
+    // No local secret, perform registration
+    let gateway_url = config::get_gateway_url();
+    let deploy_token = config::get_deployment_token()?;
+    let agent_name = config::get_agent_name();
+
+    let client = AegisClient::new(gateway_url);
+    let config = client.register(&deploy_token, agent_name).await?;
+
+    // Save secret locally
+    config::save_config(&config).context("Failed to persist agent configuration")?;
+
+    Ok(config)
+}
+
+async fn start_heartbeat_loop(config: AgentConfig) -> Result<()> {
+    let gateway_url = config::get_gateway_url();
+    let client = AegisClient::new(gateway_url);
+    let mut interval = time::interval(Duration::from_secs(30));
+
+    loop {
+        interval.tick().await;
+        if let Err(e) = client.send_heartbeat(&config).await {
+            eprintln!("Heartbeat failed: {}", e);
+        }
     }
 }
