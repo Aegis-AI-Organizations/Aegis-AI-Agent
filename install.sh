@@ -36,7 +36,9 @@ GATEWAY_URL=https://brain.aegis-ai.com
 DEPLOYMENT_TOKEN=YOUR_DEPLOYMENT_TOKEN
 INGEST_HOST=localhost
 INGEST_PORT=7233
-HEALTH_BIND_ADDR=0.0.0.0
+# Bind health checks to localhost by default. Change to 0.0.0.0 only if
+# you intentionally need remote access and have appropriate network controls.
+HEALTH_BIND_ADDR=127.0.0.1
 HEALTH_PORT=8081
 EOF
 fi

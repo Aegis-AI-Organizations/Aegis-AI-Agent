@@ -12,7 +12,8 @@ pub fn create_router() -> Router {
 pub async fn start_server(addr: SocketAddr) -> Result<(), Box<dyn std::error::Error>> {
     let app = create_router();
     let listener = TcpListener::bind(addr).await?;
-    println!("Health server listening on {}", addr);
+    let local_addr = listener.local_addr()?;
+    println!("Health server listening on {}", local_addr);
     axum::serve(listener, app).await?;
     Ok(())
 }

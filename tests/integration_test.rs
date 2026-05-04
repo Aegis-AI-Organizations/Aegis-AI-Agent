@@ -3,10 +3,12 @@ use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
+use serial_test::serial;
 use std::env;
 use tower::ServiceExt; // for `oneshot` and `ready`
 
 #[tokio::test]
+#[serial]
 async fn test_health_endpoint_integration() {
     let app = create_router();
 
@@ -27,6 +29,7 @@ async fn test_health_endpoint_integration() {
         .await;
 
     unsafe {
+        env::remove_var("INGEST_HEALTH_URL");
         env::set_var("INGEST_HOST", &host);
         env::set_var("INGEST_PORT", &port);
     }
@@ -70,6 +73,7 @@ fn test_startup_banner() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_prepare_run() {
     unsafe {
         env::set_var("SKIP_AGENT_INIT", "1");
@@ -92,9 +96,11 @@ async fn test_run_server() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_run_failure() {
     // Set specific env vars for this test to avoid leakage
     unsafe {
+        env::set_var("SKIP_AGENT_INIT", "1");
         env::set_var("HEALTH_BIND_ADDR", "127.0.0.1");
         env::set_var("HEALTH_PORT", "18081");
     }
@@ -102,12 +108,22 @@ async fn test_run_failure() {
     // 1. Bind to the port first to ensure run() fails to bind
     let _socket = std::net::TcpListener::bind("127.0.0.1:18081").unwrap();
 
-    // 2. Call run() and expect it to fail
+    // 2. Call run() and expect it to fail with a bind error
     let result = aegis_ai_agent::run().await;
-    assert!(result.is_err());
+    match result {
+        Err(e) => {
+            let err_msg = e.to_string().to_lowercase();
+            assert!(
+                err_msg.contains("address already in use") || err_msg.contains("failed to bind"),
+                "Expected bind failure, got: {}", e
+            );
+        }
+        Ok(_) => panic!("Expected run() to fail due to port collision"),
+    }
 }
 
 #[tokio::test]
+#[serial]
 async fn test_agent_init() {
     unsafe {
         env::set_var("SKIP_AGENT_INIT", "1");

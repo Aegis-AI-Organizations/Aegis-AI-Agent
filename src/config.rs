@@ -25,12 +25,29 @@ pub fn load_local_config() -> Result<Option<AgentConfig>> {
 
 pub fn save_config(config: &AgentConfig) -> Result<()> {
     let config_json = serde_json::to_string(config)?;
-    fs::write(AGENT_SECRET_FILE, config_json).context("Failed to write agent secret file")?;
 
-    let mut perms = fs::metadata(AGENT_SECRET_FILE)?.permissions();
-    perms.set_mode(0o600);
-    fs::set_permissions(AGENT_SECRET_FILE, perms)
-        .context("Failed to set permissions on agent secret file")?;
+    #[cfg(unix)]
+    {
+        use std::fs::OpenOptions;
+        use std::os::unix::fs::OpenOptionsExt;
+
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(AGENT_SECRET_FILE)
+            .context("Failed to create agent secret file with restricted permissions")?;
+        
+        use std::io::Write;
+        file.write_all(config_json.as_bytes())
+            .context("Failed to write to agent secret file")?;
+    }
+
+    #[cfg(not(unix))]
+    {
+        fs::write(AGENT_SECRET_FILE, config_json).context("Failed to write agent secret file")?;
+    }
 
     Ok(())
 }

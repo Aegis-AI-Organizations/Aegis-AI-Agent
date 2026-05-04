@@ -15,7 +15,7 @@ jobs:
           targets: x86_64-unknown-linux-musl
 
       - name: Install Cross
-        run: cargo install cross --git https://github.com/cross-rs/cross
+        run: cargo install cross --version 0.2.5
 
       - name: Build Static Binary
         run: cross build --release --target x86_64-unknown-linux-musl

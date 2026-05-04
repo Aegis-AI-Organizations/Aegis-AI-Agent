@@ -18,12 +18,14 @@ fn ingest_health_client() -> &'static reqwest::Client {
 #[derive(Serialize)]
 pub struct HealthStatus {
     pub status: String,
+    pub ingest: String,
     pub ingest_connection: String,
 }
 
 pub async fn health_handler() -> impl IntoResponse {
     let mut status = HealthStatus {
         status: "UP".to_string(),
+        ingest: "unknown".to_string(),
         ingest_connection: "unknown".to_string(),
     };
 
@@ -35,22 +37,29 @@ pub async fn health_handler() -> impl IntoResponse {
     });
 
     match ingest_health_client().get(&ingest_url).send().await {
-        Ok(resp) if resp.status().is_success() => status.ingest_connection = "OK".to_string(),
+        Ok(resp) if resp.status().is_success() => {
+            status.ingest = "UP".to_string();
+            status.ingest_connection = "OK".to_string();
+        }
         Ok(resp) => {
             eprintln!(
                 "Ingest health check returned non-success status: {}",
                 resp.status()
             );
-            status.ingest_connection = "ERROR".to_string();
+            status.ingest = "DOWN".to_string();
+            status.ingest_connection = format!("HTTP {}", resp.status());
+            status.status = "DOWN".to_string();
         }
         Err(e) => {
             eprintln!("Ingest health check failed: {}", e);
-            status.ingest_connection = "ERROR".to_string();
+            status.ingest = "DOWN".to_string();
+            status.ingest_connection = format!("ERROR: {}", e);
+            status.status = "DOWN".to_string();
         }
     }
 
     // Agent is always UP if this handler is reached, but we return 503 if dependencies fail
-    let code = if status.ingest_connection == "OK" {
+    let code = if status.status == "UP" {
         StatusCode::OK
     } else {
         StatusCode::SERVICE_UNAVAILABLE
