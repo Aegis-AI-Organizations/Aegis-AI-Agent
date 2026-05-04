@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize)]
 struct RegisterRequest {
     name: String,
+    token: String,
 }
 
 #[derive(Deserialize)]
@@ -36,7 +37,10 @@ impl AegisClient {
             .client
             .post(format!("{}/api/agents/register", self.gateway_url))
             .header("Authorization", format!("Bearer {}", deploy_token))
-            .json(&RegisterRequest { name: agent_name })
+            .json(&RegisterRequest {
+                name: agent_name,
+                token: deploy_token.to_string(),
+            })
             .send()
             .await
             .context("Failed to send registration request")?;

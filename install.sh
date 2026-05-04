@@ -4,6 +4,8 @@ set -e
 # Configuration
 AGENT_USER="aegis-agent"
 INSTALL_DIR="/usr/local/bin"
+CONFIG_DIR="/etc/aegis-agent"
+VAR_DIR="/var/lib/aegis-agent"
 BINARY_NAME="aegis-ai-agent"
 SERVICE_NAME="aegis-agent.service"
 
@@ -17,12 +19,35 @@ fi
 
 # Move binary (assuming it's in the current directory)
 if [ -f "$BINARY_NAME" ]; then
-    mv "$BINARY_NAME" "$INSTALL_DIR/"
+    cp "$BINARY_NAME" "$INSTALL_DIR/"
     chmod 755 "$INSTALL_DIR/$BINARY_NAME"
 else
     echo "Error: Binary $BINARY_NAME not found in current directory."
     exit 1
 fi
+
+# Prepare config directory
+mkdir -p "$CONFIG_DIR"
+if [ ! -f "$CONFIG_DIR/agent.env" ]; then
+    echo "Creating environment template at $CONFIG_DIR/agent.env"
+    cat <<EOF > "$CONFIG_DIR/agent.env"
+# Aegis AI Agent Configuration
+GATEWAY_URL=https://brain.aegis-ai.com
+DEPLOYMENT_TOKEN=YOUR_DEPLOYMENT_TOKEN
+INGEST_HOST=localhost
+INGEST_PORT=7233
+HEALTH_BIND_ADDR=0.0.0.0
+HEALTH_PORT=8081
+EOF
+fi
+chown -R root:root "$CONFIG_DIR"
+chmod 755 "$CONFIG_DIR"
+chmod 600 "$CONFIG_DIR/agent.env"
+
+# Create working directory
+mkdir -p "$VAR_DIR"
+chown "$AGENT_USER:$AGENT_USER" "$VAR_DIR"
+chmod 700 "$VAR_DIR"
 
 # Create systemd service
 echo "Creating systemd service..."
@@ -34,29 +59,31 @@ After=network.target
 [Service]
 Type=simple
 User=$AGENT_USER
-WorkingDirectory=/var/lib/aegis-agent
+WorkingDirectory=$VAR_DIR
+EnvironmentFile=$CONFIG_DIR/agent.env
 ExecStart=$INSTALL_DIR/$BINARY_NAME
 Restart=always
 RestartSec=10
+
 # Security hardening
 NoNewPrivileges=true
 PrivateTmp=true
 DeviceAllow=/dev/null rw
 ProtectSystem=full
 ProtectHome=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-# Create working directory
-mkdir -p /var/lib/aegis-agent
-chown $AGENT_USER:$AGENT_USER /var/lib/aegis-agent
-chmod 700 /var/lib/aegis-agent
-
 # Reload systemd and start service
 systemctl daemon-reload
 systemctl enable $SERVICE_NAME
-systemctl start $SERVICE_NAME
 
-echo "Aegis AI Agent installed and started successfully."
+echo "-------------------------------------------------------"
+echo "Aegis AI Agent installed successfully."
+echo "CRITICAL: Update $CONFIG_DIR/agent.env with your credentials."
+echo "Then run: systemctl start $SERVICE_NAME"
+echo "-------------------------------------------------------"
