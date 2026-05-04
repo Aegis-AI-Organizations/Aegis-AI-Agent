@@ -66,42 +66,52 @@ pub fn get_agent_name() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
-    use std::env;
     use serial_test::serial;
+    use std::env;
+    use std::fs;
 
     #[test]
     #[serial]
     fn test_get_agent_name_default() {
-        unsafe { env::remove_var("AGENT_NAME"); }
+        unsafe {
+            env::remove_var("AGENT_NAME");
+        }
         assert_eq!(get_agent_name(), "rust-agent-01");
     }
 
     #[test]
     #[serial]
     fn test_get_agent_name_custom() {
-        unsafe { env::set_var("AGENT_NAME", "custom-agent"); }
+        unsafe {
+            env::set_var("AGENT_NAME", "custom-agent");
+        }
         assert_eq!(get_agent_name(), "custom-agent");
     }
 
     #[test]
     #[serial]
     fn test_get_gateway_url_default() {
-        unsafe { env::remove_var("GATEWAY_URL"); }
+        unsafe {
+            env::remove_var("GATEWAY_URL");
+        }
         assert_eq!(get_gateway_url(), "http://localhost:8080");
     }
 
     #[test]
     #[serial]
     fn test_get_deployment_token_error() {
-        unsafe { env::remove_var("DEPLOYMENT_TOKEN"); }
+        unsafe {
+            env::remove_var("DEPLOYMENT_TOKEN");
+        }
         assert!(get_deployment_token().is_err());
     }
 
     #[test]
     #[serial]
     fn test_get_deployment_token_ok() {
-        unsafe { env::set_var("DEPLOYMENT_TOKEN", "secret-token"); }
+        unsafe {
+            env::set_var("DEPLOYMENT_TOKEN", "secret-token");
+        }
         assert_eq!(get_deployment_token().unwrap(), "secret-token");
     }
 
@@ -109,7 +119,7 @@ mod tests {
     fn test_save_and_load_config() {
         let temp_dir = tempfile::tempdir().unwrap();
         let config_path = temp_dir.path().join(".agent_secret_test");
-        
+
         let config = AgentConfig {
             agent_id: "test-id".to_string(),
             agent_secret: "test-secret".to_string(),
@@ -122,7 +132,7 @@ mod tests {
 
         let content = fs::read_to_string(&config_path).unwrap();
         let loaded: AgentConfig = serde_json::from_str(&content).unwrap();
-        
+
         assert_eq!(loaded.agent_id, "test-id");
         assert_eq!(loaded.agent_secret, "test-secret");
     }

@@ -106,7 +106,10 @@ mod tests {
             .await;
 
         let client = AegisClient::new(url);
-        let config = client.register("token", "agent-01".to_string()).await.unwrap();
+        let config = client
+            .register("token", "agent-01".to_string())
+            .await
+            .unwrap();
 
         assert_eq!(config.agent_id, "123");
         assert_eq!(config.agent_secret, "abc");
