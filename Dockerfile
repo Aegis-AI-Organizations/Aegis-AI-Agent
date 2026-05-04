@@ -11,6 +11,6 @@ FROM scratch
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 # Copy the compiled static binary
 COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/aegis-ai-agent /aegis-ai-agent
-# Run as non-privileged is handled by the orchestrator/systemd, 
+# Run as non-privileged is handled by the orchestrator/systemd,
 # but entrypoint is set to the binary
 ENTRYPOINT ["/aegis-ai-agent"]
