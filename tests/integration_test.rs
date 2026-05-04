@@ -1,4 +1,4 @@
-use aegis_ai_agent::create_app;
+use aegis_ai_agent::server::create_router;
 use axum::{
     body::Body,
     http::{Request, StatusCode},
@@ -8,7 +8,7 @@ use tower::ServiceExt; // for `oneshot` and `ready`
 
 #[tokio::test]
 async fn test_health_endpoint_integration() {
-    let app = create_app();
+    let app = create_router();
 
     // Mock Ingest to avoid flake
     let mut server = mockito::Server::new_async().await;
@@ -46,7 +46,7 @@ async fn test_health_endpoint_integration() {
 
 #[tokio::test]
 async fn test_not_found_integration() {
-    let app = create_app();
+    let app = create_router();
 
     let response = app
         .oneshot(
@@ -74,17 +74,16 @@ async fn test_prepare_run() {
     unsafe {
         env::set_var("SKIP_AGENT_INIT", "1");
     }
-    let _app = aegis_ai_agent::prepare_run().await.unwrap();
+    let _addr = aegis_ai_agent::prepare_run().await.unwrap();
 }
 
 #[tokio::test]
 async fn test_run_server() {
-    let app = create_app();
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr: std::net::SocketAddr = "127.0.0.1:0".parse().unwrap();
 
     // Spawn server in background
     let handle = tokio::spawn(async move {
-        aegis_ai_agent::run_server(listener, app).await.unwrap();
+        aegis_ai_agent::server::start_server(addr).await.unwrap();
     });
 
     // Let it start, then abort
