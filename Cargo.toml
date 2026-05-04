@@ -17,3 +17,4 @@ mockito = "1.4"
 tower = { version = "0.4", features = ["util"] }
 http = "1.0"
 serial_test = "3.1"
+tempfile = "3.27.0"

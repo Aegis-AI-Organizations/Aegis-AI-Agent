@@ -38,3 +38,13 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let addr = prepare_run().await?;
     server::start_server(addr).await
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_startup_banner() {
+        assert_eq!(startup_banner(), "Hello, world! Aegis AI Agent is starting...");
+    }
+}
