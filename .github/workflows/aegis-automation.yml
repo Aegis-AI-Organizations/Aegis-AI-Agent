@@ -30,7 +30,7 @@ jobs:
           echo "project_number=$PROJECT_NUMBER" >> $GITHUB_OUTPUT
           # Add the item using the PROJECT_NUMBER
           GH_URL="${{ github.event.issue.html_url || github.event.pull_request.html_url || 'https://github.com/Aegis-AI-Organizations/Aegis-AI-Agent/issues/20' }}"
-          ITEM_ID=$(gh project item-add "$PROJECT_NUMBER" --org Aegis-AI-Organizations --url "$GH_URL" --format json -q '.id')
+          ITEM_ID=$(gh project item-add "$PROJECT_NUMBER" --owner Aegis-AI-Organizations --url "$GH_URL" --format json -q '.id')
           echo "item_id=$ITEM_ID" >> $GITHUB_OUTPUT
 
       - name: Auto-Assign Author
