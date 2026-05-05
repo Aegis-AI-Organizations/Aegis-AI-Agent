@@ -1,6 +1,7 @@
 use crate::config::AgentConfig;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
+use std::env;
 use std::time::Duration;
 
 #[derive(Serialize)]
@@ -27,10 +28,11 @@ pub struct AegisClient {
 
 impl AegisClient {
     pub fn new(gateway_url: String) -> Self {
+        let allow_http = cfg!(test) || env::var("AGENT_ALLOW_HTTP").unwrap_or_default() == "true";
         let client = reqwest::Client::builder()
             .use_rustls_tls()
             .min_tls_version(reqwest::tls::Version::TLS_1_2)
-            .https_only(!cfg!(test))
+            .https_only(!allow_http)
             .build()
             .unwrap_or_else(|_| reqwest::Client::new());
 
