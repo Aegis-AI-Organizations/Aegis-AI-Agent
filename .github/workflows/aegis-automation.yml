@@ -91,10 +91,18 @@ jobs:
               ... on ProjectV2 {
                 fields(first: 20) {
                   nodes {
+                    __typename
                     ... on ProjectV2SingleSelectField {
                       id
                       name
                       options { id name }
+                    }
+                    ... on ProjectV2IterationField {
+                      id
+                      name
+                      configuration {
+                        iterations { id title startDate duration }
+                      }
                     }
                   }
                 }
@@ -103,9 +111,19 @@ jobs:
           }'
           
           FIELDS_JSON=$(gh api graphql -f project="$PROJECT_ID" -f query="$QUERY")
+          
+          # Debug output to help diagnose missing exact matches
+          echo "Dumping Fields JSON for debugging:"
+          echo "$FIELDS_JSON" | jq .
 
           UPDATE_MUTATION='mutation($project: ID!, $item: ID!, $field: ID!, $option: String!) {
             updateProjectV2ItemFieldValue(input: {projectId: $project, itemId: $item, fieldId: $field, value: { singleSelectOptionId: $option }}) {
+              projectV2Item { id }
+            }
+          }'
+          
+          UPDATE_ITERATION_MUTATION='mutation($project: ID!, $item: ID!, $field: ID!, $option: String!) {
+            updateProjectV2ItemFieldValue(input: {projectId: $project, itemId: $item, fieldId: $field, value: { iterationId: $option }}) {
               projectV2Item { id }
             }
           }'
@@ -123,28 +141,51 @@ jobs:
             gh api graphql -f project="$PROJECT_ID" -f item="$ITEM_ID" -f field="$STATUS_FIELD_ID" -f option="$STATUS_OPTION_ID" -f query="$UPDATE_MUTATION"
           fi
 
-          # 3. Dynamic Component detection
+          # 3. Dynamic Component detection (Fuzzy match)
           REPO_NAME="${{ github.event.repository.name }}"
           COMPONENT="Other"
-          if [[ "$REPO_NAME" == *"Agent"* ]]; then COMPONENT="Agent (Rust)"; fi
-          if [[ "$REPO_NAME" == *"Gateway"* ]]; then COMPONENT="Gateway (Go)"; fi
-          if [[ "$REPO_NAME" == *"Brain"* ]]; then COMPONENT="Brain (Python)"; fi
-          if [[ "$REPO_NAME" == *"Dashboard"* ]]; then COMPONENT="Dashboard (Web)"; fi
+          if [[ "$REPO_NAME" == *"Agent"* ]]; then COMPONENT="Agent"; fi
+          if [[ "$REPO_NAME" == *"Gateway"* ]]; then COMPONENT="Gateway"; fi
+          if [[ "$REPO_NAME" == *"Brain"* ]]; then COMPONENT="Brain"; fi
+          if [[ "$REPO_NAME" == *"Dashboard"* ]]; then COMPONENT="Dashboard"; fi
           if [[ "$REPO_NAME" == *"Documentation"* ]]; then COMPONENT="Documentation"; fi
-          if [[ "$REPO_NAME" == *"Infra"* ]]; then COMPONENT="Infrastructure (K8s)"; fi
-          if [[ "$REPO_NAME" == *"Landing"* ]]; then COMPONENT="Landing Page"; fi
-          if [[ "$REPO_NAME" == *"Proto"* ]]; then COMPONENT="Contracts (Proto)"; fi
-          if [[ "$REPO_NAME" == *"Worker-Ingest"* ]]; then COMPONENT="Worker (Ingest)"; fi
-          if [[ "$REPO_NAME" == *"Worker-Deployer"* ]]; then COMPONENT="Worker (Deployer)"; fi
-          if [[ "$REPO_NAME" == *"Worker-Fixer"* ]]; then COMPONENT="Worker (Fixer)"; fi
-          if [[ "$REPO_NAME" == *"Worker-Pentest"* ]]; then COMPONENT="Worker (Pentest)"; fi
-          if [[ "$REPO_NAME" == *"Internal"* ]]; then COMPONENT="Internal Tools"; fi
+          if [[ "$REPO_NAME" == *"Infra"* ]]; then COMPONENT="Infrastructure"; fi
+          if [[ "$REPO_NAME" == *"Landing"* ]]; then COMPONENT="Landing"; fi
+          if [[ "$REPO_NAME" == *"Proto"* ]]; then COMPONENT="Contracts"; fi
+          if [[ "$REPO_NAME" == *"Worker-Ingest"* ]]; then COMPONENT="Ingest"; fi
+          if [[ "$REPO_NAME" == *"Worker-Deployer"* ]]; then COMPONENT="Deployer"; fi
+          if [[ "$REPO_NAME" == *"Worker-Fixer"* ]]; then COMPONENT="Fixer"; fi
+          if [[ "$REPO_NAME" == *"Worker-Pentest"* ]]; then COMPONENT="Pentest"; fi
+          if [[ "$REPO_NAME" == *"Internal"* ]]; then COMPONENT="Internal"; fi
           
           COMP_FIELD_ID=$(echo "$FIELDS_JSON" | jq -r '.data.node.fields.nodes[]? | select(.name == "Components") | .id')
-          COMP_OPTION_ID=$(echo "$FIELDS_JSON" | jq -r '.data.node.fields.nodes[]? | select(.name == "Components") | .options[]? | select(.name == "'"$COMPONENT"'") | .id')
+          COMP_OPTION_ID=$(echo "$FIELDS_JSON" | jq -r '.data.node.fields.nodes[]? | select(.name == "Components") | .options[]? | select(.name | contains("'"$COMPONENT"'")) | .id' | head -n 1)
           
           if [[ -n "$COMP_FIELD_ID" && "$COMP_FIELD_ID" != "null" && -n "$COMP_OPTION_ID" && "$COMP_OPTION_ID" != "null" ]]; then
             gh api graphql -f project="$PROJECT_ID" -f item="$ITEM_ID" -f field="$COMP_FIELD_ID" -f option="$COMP_OPTION_ID" -f query="$UPDATE_MUTATION"
+          else
+            echo "Warning: Could not find component option matching $COMPONENT"
+          fi
+          
+          # 4. Set Iteration to the first active iteration
+          ITERATION_FIELD_ID=$(echo "$FIELDS_JSON" | jq -r '.data.node.fields.nodes[]? | select(.__typename == "ProjectV2IterationField" and .name == "Iteration") | .id')
+          ITERATION_OPTION_ID=$(echo "$FIELDS_JSON" | jq -r '.data.node.fields.nodes[]? | select(.__typename == "ProjectV2IterationField" and .name == "Iteration") | .configuration.iterations[0].id')
+          
+          if [[ -n "$ITERATION_FIELD_ID" && "$ITERATION_FIELD_ID" != "null" && -n "$ITERATION_OPTION_ID" && "$ITERATION_OPTION_ID" != "null" ]]; then
+            gh api graphql -f project="$PROJECT_ID" -f item="$ITEM_ID" -f field="$ITERATION_FIELD_ID" -f option="$ITERATION_OPTION_ID" -f query="$UPDATE_ITERATION_MUTATION"
+          fi
+
+          # 5. Set Priority (Default to Medium/Normal or fallback to first option)
+          PRIORITY_FIELD_ID=$(echo "$FIELDS_JSON" | jq -r '.data.node.fields.nodes[]? | select(.name == "Priority") | .id')
+          PRIORITY_OPTION_ID=$(echo "$FIELDS_JSON" | jq -r '.data.node.fields.nodes[]? | select(.name == "Priority") | .options[]? | select(.name == "Medium" or .name == "Normal" or .name == "P2") | .id' | head -n 1)
+          
+          # If Medium/Normal is not found, just pick the second option (usually Medium in a High/Medium/Low setup)
+          if [[ -z "$PRIORITY_OPTION_ID" || "$PRIORITY_OPTION_ID" == "null" ]]; then
+            PRIORITY_OPTION_ID=$(echo "$FIELDS_JSON" | jq -r '.data.node.fields.nodes[]? | select(.name == "Priority") | .options[1]?.id')
+          fi
+
+          if [[ -n "$PRIORITY_FIELD_ID" && "$PRIORITY_FIELD_ID" != "null" && -n "$PRIORITY_OPTION_ID" && "$PRIORITY_OPTION_ID" != "null" ]]; then
+            gh api graphql -f project="$PROJECT_ID" -f item="$ITEM_ID" -f field="$PRIORITY_FIELD_ID" -f option="$PRIORITY_OPTION_ID" -f query="$UPDATE_MUTATION"
           fi
 
       - name: Update Description
