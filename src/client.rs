@@ -16,6 +16,12 @@ struct RegisterResponse {
     agent_secret: String,
 }
 
+#[derive(Deserialize)]
+struct UploadLinkResponse {
+    url: String,
+    method: String,
+}
+
 #[derive(Serialize)]
 struct StatusUpdate {
     status: String,
@@ -94,6 +100,27 @@ impl AegisClient {
         }
 
         Ok(())
+    }
+
+    pub async fn get_upload_url(&self, config: &AgentConfig, filename: &str) -> Result<String> {
+        let resp = self
+            .client
+            .get(format!(
+                "{}/api/agents/{}/upload-url",
+                self.gateway_url, config.agent_id
+            ))
+            .query(&[("filename", filename)])
+            .header("Authorization", format!("Bearer {}", config.agent_secret))
+            .send()
+            .await
+            .context("Failed to get upload URL")?;
+
+        if !resp.status().is_success() {
+            anyhow::bail!("Failed to get upload URL: {}", resp.status());
+        }
+
+        let link_resp: UploadLinkResponse = resp.json().await.context("Failed to parse upload URL response")?;
+        Ok(link_resp.url)
     }
 
     pub async fn upload_payload(&self, presigned_url: &str, data: Vec<u8>) -> Result<()> {
@@ -203,6 +230,30 @@ mod tests {
 
         let result = client.send_heartbeat(&config).await;
         assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_get_upload_url_success() {
+        let mut server = mockito::Server::new_async().await;
+        let url = server.url();
+
+        let _m = server
+            .mock("GET", "/api/agents/123/upload-url?filename=test.txt")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"url": "http://minio/upload", "method": "PUT"}"#)
+            .create_async()
+            .await;
+
+        let client = AegisClient::new(url);
+        let config = AgentConfig {
+            agent_id: "123".to_string(),
+            agent_secret: "abc".to_string(),
+        };
+
+        let result = client.get_upload_url(&config, "test.txt").await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "http://minio/upload");
     }
 
     #[tokio::test]
