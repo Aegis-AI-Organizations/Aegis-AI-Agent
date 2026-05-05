@@ -23,6 +23,12 @@ jobs:
           REPO_OWNER="${{ github.repository_owner }}"
           REPO_NAME="${{ github.event.repository.name }}"
 
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            QUERY_TYPE="pullRequest"
+          else
+            QUERY_TYPE="issue"
+          fi
+
           QUERY='query($org: String!, $repo: String!, $number: Int!) {
             organization(login: $org) {
               projectsV2(first: 20) {
@@ -30,15 +36,14 @@ jobs:
               }
             }
             repository(owner: $org, name: $repo) {
-              issue(number: $number) { id }
-              pullRequest(number: $number) { id }
+              '"$QUERY_TYPE"'(number: $number) { id }
             }
           }'
 
           RESULT=$(gh api graphql -f org="$REPO_OWNER" -f repo="$REPO_NAME" -F number=$GH_NUMBER -f query="$QUERY")
 
           PROJECT_ID=$(echo "$RESULT" | jq -r '.data.organization.projectsV2.nodes[] | select(.title == "Aegis AI") | .id')
-          CONTENT_ID=$(echo "$RESULT" | jq -r '.data.repository.issue.id // .data.repository.pullRequest.id')
+          CONTENT_ID=$(echo "$RESULT" | jq -r ".data.repository.${QUERY_TYPE}.id")
 
           if [ "$PROJECT_ID" == "null" ] || [ "$CONTENT_ID" == "null" ]; then
             echo "Error: Could not resolve IDs. Project: $PROJECT_ID, Content: $CONTENT_ID"
