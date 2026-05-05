@@ -40,10 +40,7 @@ mod tests {
 
     #[test]
     fn test_startup_banner() {
-        assert_eq!(
-            startup_banner(),
-            "Aegis AI Agent is starting..."
-        );
+        assert_eq!(startup_banner(), "Aegis AI Agent is starting...");
     }
 
     #[tokio::test]
