@@ -109,9 +109,9 @@ jobs:
               }
             }
           }'
-          
+
           FIELDS_JSON=$(gh api graphql -f project="$PROJECT_ID" -f query="$QUERY")
-          
+
           # Debug output to help diagnose missing exact matches
           echo "Dumping Fields JSON for debugging:"
           echo "$FIELDS_JSON" | jq .
@@ -121,7 +121,7 @@ jobs:
               projectV2Item { id }
             }
           }'
-          
+
           UPDATE_ITERATION_MUTATION='mutation($project: ID!, $item: ID!, $field: ID!, $option: String!) {
             updateProjectV2ItemFieldValue(input: {projectId: $project, itemId: $item, fieldId: $field, value: { iterationId: $option }}) {
               projectV2Item { id }
@@ -133,10 +133,10 @@ jobs:
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             STATUS_OPTION="In review"
           fi
-          
+
           STATUS_FIELD_ID=$(echo "$FIELDS_JSON" | jq -r '.data.node.fields.nodes[]? | select(.name == "Status") | .id')
           STATUS_OPTION_ID=$(echo "$FIELDS_JSON" | jq -r '.data.node.fields.nodes[]? | select(.name == "Status") | .options[]? | select(.name == "'"$STATUS_OPTION"'") | .id')
-          
+
           if [[ -n "$STATUS_FIELD_ID" && "$STATUS_FIELD_ID" != "null" && -n "$STATUS_OPTION_ID" && "$STATUS_OPTION_ID" != "null" ]]; then
             gh api graphql -f project="$PROJECT_ID" -f item="$ITEM_ID" -f field="$STATUS_FIELD_ID" -f option="$STATUS_OPTION_ID" -f query="$UPDATE_MUTATION"
           fi
@@ -157,20 +157,20 @@ jobs:
           if [[ "$REPO_NAME" == *"Worker-Fixer"* ]]; then COMPONENT="Fixer"; fi
           if [[ "$REPO_NAME" == *"Worker-Pentest"* ]]; then COMPONENT="Pentest"; fi
           if [[ "$REPO_NAME" == *"Internal"* ]]; then COMPONENT="Internal"; fi
-          
+
           COMP_FIELD_ID=$(echo "$FIELDS_JSON" | jq -r '.data.node.fields.nodes[]? | select(.name == "Components") | .id')
           COMP_OPTION_ID=$(echo "$FIELDS_JSON" | jq -r '.data.node.fields.nodes[]? | select(.name == "Components") | .options[]? | select(.name | contains("'"$COMPONENT"'")) | .id' | head -n 1)
-          
+
           if [[ -n "$COMP_FIELD_ID" && "$COMP_FIELD_ID" != "null" && -n "$COMP_OPTION_ID" && "$COMP_OPTION_ID" != "null" ]]; then
             gh api graphql -f project="$PROJECT_ID" -f item="$ITEM_ID" -f field="$COMP_FIELD_ID" -f option="$COMP_OPTION_ID" -f query="$UPDATE_MUTATION"
           else
             echo "Warning: Could not find component option matching $COMPONENT"
           fi
-          
+
           # 4. Set Iteration to the first active iteration
           ITERATION_FIELD_ID=$(echo "$FIELDS_JSON" | jq -r '.data.node.fields.nodes[]? | select(.__typename == "ProjectV2IterationField" and .name == "Iteration") | .id')
           ITERATION_OPTION_ID=$(echo "$FIELDS_JSON" | jq -r '.data.node.fields.nodes[]? | select(.__typename == "ProjectV2IterationField" and .name == "Iteration") | .configuration.iterations[0].id')
-          
+
           if [[ -n "$ITERATION_FIELD_ID" && "$ITERATION_FIELD_ID" != "null" && -n "$ITERATION_OPTION_ID" && "$ITERATION_OPTION_ID" != "null" ]]; then
             gh api graphql -f project="$PROJECT_ID" -f item="$ITEM_ID" -f field="$ITERATION_FIELD_ID" -f option="$ITERATION_OPTION_ID" -f query="$UPDATE_ITERATION_MUTATION"
           fi
@@ -178,7 +178,7 @@ jobs:
           # 5. Set Priority (Default to Medium/Normal or fallback to first option)
           PRIORITY_FIELD_ID=$(echo "$FIELDS_JSON" | jq -r '.data.node.fields.nodes[]? | select(.name == "Priority") | .id')
           PRIORITY_OPTION_ID=$(echo "$FIELDS_JSON" | jq -r '.data.node.fields.nodes[]? | select(.name == "Priority") | .options[]? | select(.name == "Medium" or .name == "Normal" or .name == "P2") | .id' | head -n 1)
-          
+
           # If Medium/Normal is not found, just pick the second option (usually Medium in a High/Medium/Low setup)
           if [[ -z "$PRIORITY_OPTION_ID" || "$PRIORITY_OPTION_ID" == "null" ]]; then
             PRIORITY_OPTION_ID=$(echo "$FIELDS_JSON" | jq -r '.data.node.fields.nodes[]? | select(.name == "Priority") | .options[1]?.id')
