@@ -1,0 +1,53 @@
+name: Aegis AI Automation
+
+on:
+  issues:
+    types: [opened]
+  pull_request:
+    types: [opened]
+
+jobs:
+  automate-project:
+    name: Automate Project Linking and Metadata
+    runs-on: ubuntu-latest
+    steps:
+      - name: Add to Aegis AI Project
+        id: add_to_project
+        uses: actions/add-to-project@v1.0.1
+        with:
+          project-url: https://github.com/orgs/Aegis-AI-Organizations/projects/1
+          github-token: ${{ secrets.AEGIS_PROJECT_TOKEN }}
+
+      - name: Auto-Assign Author
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const actor = context.actor;
+            
+            await github.rest.issues.addAssignees({
+              owner,
+              repo,
+              issue_number,
+              assignees: [actor]
+            });
+
+      - name: Set Project Fields
+        env:
+          GH_TOKEN: ${{ secrets.AEGIS_PROJECT_TOKEN }}
+          ITEM_ID: ${{ steps.add_to_project.outputs.item-id }}
+          PROJECT_ID: ${{ steps.add_to_project.outputs.project-id }}
+        run: |
+          # 1. If PR, set Status to "In review"
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_ID" --field-id "Status" --single-select-option-id "In review"
+          fi
+
+          # 2. Set Component to "Agent (Rust)"
+          # Note: We use the option name directly, gh CLI handles finding the ID
+          gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_ID" --field-id "Components" --single-select-option-id "Agent (Rust)"
+          
+          # 3. Auto-Iteration logic (Requires the project to have an active iteration)
+          # The gh CLI will automatically pick the 'current' iteration if we don't specify one or if configured
+          # For now, we set the Component and Status which are the most critical.
