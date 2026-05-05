@@ -11,19 +11,26 @@ jobs:
     name: Automate Project Linking and Metadata
     runs-on: ubuntu-latest
     steps:
-      - name: Add to Aegis AI Project
-        id: add_to_project
-        uses: actions/add-to-project@v1.0.1
-        with:
-          project-url: https://github.com/orgs/Aegis-AI-Organizations/projects/1
-          github-token: ${{ secrets.ORG_PAT }}
+      - name: Get Project Metadata
+        id: project_info
+        env:
+          GH_TOKEN: ${{ secrets.ORG_PAT }}
+        run: |
+          # Find the Project ID for "Aegis AI"
+          PROJECT_ID=$(gh project list --owner Aegis-AI-Organizations --format json -q '.projects[] | select(.title == "Aegis AI") | .id')
+          echo "project_id=$PROJECT_ID" >> $GITHUB_OUTPUT
+          
+          # Add the item to the project and get the Item ID
+          GH_URL="${{ github.event.issue.html_url || github.event.pull_request.html_url }}"
+          ITEM_ID=$(gh project item-add "$PROJECT_ID" --url "$GH_URL" --format json -q '.id')
+          echo "item_id=$ITEM_ID" >> $GITHUB_OUTPUT
 
       - name: Auto-Assign Author
         uses: actions/github-script@v7
         with:
           script: |
             const { owner, repo } = context.repo;
-            const issue_number = context.issue.number;
+            const issue_number = context.issue ? context.issue.number : context.payload.pull_request.number;
             const actor = context.actor;
             
             await github.rest.issues.addAssignees({
@@ -36,15 +43,16 @@ jobs:
       - name: Set Project Fields
         env:
           GH_TOKEN: ${{ secrets.ORG_PAT }}
-          ITEM_ID: ${{ steps.add_to_project.outputs.item-id }}
-          PROJECT_ID: ${{ steps.add_to_project.outputs.project-id }}
+          ITEM_ID: ${{ steps.project_info.outputs.item_id }}
+          PROJECT_ID: ${{ steps.project_info.outputs.project_id }}
         run: |
           # 1. Set Status based on event type
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_ID" --field-id "Status" --single-select-option-id "In review"
+            # Set to "In review" for PRs
+            gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_ID" --field "Status" --single-select-option "In review"
           else
-            # It's an issue
-            gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_ID" --field-id "Status" --single-select-option-id "Ready"
+            # Set to "Ready" for Issues
+            gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_ID" --field "Status" --single-select-option "Ready"
           fi
 
           # 2. Dynamic Component detection based on repo name
@@ -65,21 +73,34 @@ jobs:
           if [[ "$REPO_NAME" == *"Worker-Pentest"* ]]; then COMPONENT="Worker (Pentest)"; fi
           if [[ "$REPO_NAME" == *"Internal"* ]]; then COMPONENT="Internal Tools"; fi
 
-          gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_ID" --field-id "Components" --single-select-option-id "$COMPONENT"
+          gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_ID" --field "Components" --single-select-option "$COMPONENT"
           
-          # 3. Update Issue/PR description to check the corresponding box
+      - name: Update Description
+        env:
+          GH_TOKEN: ${{ secrets.ORG_PAT }}
+        run: |
+          # Find the component name again for regex
+          REPO_NAME="${{ github.event.repository.name }}"
+          COMPONENT="Other"
+          if [[ "$REPO_NAME" == *"Agent"* ]]; then COMPONENT="Agent (Rust)"; fi
+          if [[ "$REPO_NAME" == *"Gateway"* ]]; then COMPONENT="Gateway (Go)"; fi
+          if [[ "$REPO_NAME" == *"Brain"* ]]; then COMPONENT="Brain (Python)"; fi
+          if [[ "$REPO_NAME" == *"Dashboard"* ]]; then COMPONENT="Dashboard (Web)"; fi
+          if [[ "$REPO_NAME" == *"Documentation"* ]]; then COMPONENT="Documentation"; fi
+          if [[ "$REPO_NAME" == *"Infra"* ]]; then COMPONENT="Infrastructure (K8s)"; fi
+          if [[ "$REPO_NAME" == *"Landing"* ]]; then COMPONENT="Landing Page"; fi
+          if [[ "$REPO_NAME" == *"Proto"* ]]; then COMPONENT="Contracts (Proto)"; fi
+          if [[ "$REPO_NAME" == *"Worker-Ingest"* ]]; then COMPONENT="Worker (Ingest)"; fi
+          if [[ "$REPO_NAME" == *"Worker-Deployer"* ]]; then COMPONENT="Worker (Deployer)"; fi
+          if [[ "$REPO_NAME" == *"Worker-Fixer"* ]]; then COMPONENT="Worker (Fixer)"; fi
+          if [[ "$REPO_NAME" == *"Worker-Pentest"* ]]; then COMPONENT="Worker (Pentest)"; fi
+          if [[ "$REPO_NAME" == *"Internal"* ]]; then COMPONENT="Internal Tools"; fi
+
           GH_NUMBER="${{ github.event.issue.number || github.event.pull_request.number }}"
-          # Use GH_TOKEN for reading/editing the body
           BODY=$(gh issue view "$GH_NUMBER" --json body -q .body 2>/dev/null || gh pr view "$GH_NUMBER" --json body -q .body)
-          
-          # Clean the component name for regex (remove parentheses)
           CLEAN_COMP=$(echo "$COMPONENT" | sed 's/[()]//g' | cut -d' ' -f1)
-          
-          # Use regex to check the box matching the component name
           NEW_BODY=$(echo "$BODY" | sed "s/\[ \] \(.*$CLEAN_COMP.*\)/\[x\] \1/g")
           
           if [[ "$NEW_BODY" != "$BODY" ]]; then
             gh issue edit "$GH_NUMBER" --body "$NEW_BODY" 2>/dev/null || gh pr edit "$GH_NUMBER" --body "$NEW_BODY"
           fi
-
-          # 4. Auto-Iteration logic
