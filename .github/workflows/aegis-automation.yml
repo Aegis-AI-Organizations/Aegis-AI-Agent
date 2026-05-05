@@ -20,18 +20,18 @@ jobs:
           # Fetch both ID and Number (item-add needs Number, item-edit needs ID)
           QUERY='query($org: String!) { organization(login: $org) { projectsV2(first: 20) { nodes { id number title } } } }'
           PROJECT_DATA=$(gh api graphql -f org="Aegis-AI-Organizations" -f query="$QUERY" -q '.data.organization.projectsV2.nodes[] | select(.title == "Aegis AI")')
-          
+
           PROJECT_ID=$(echo "$PROJECT_DATA" | jq -r '.id')
           PROJECT_NUMBER=$(echo "$PROJECT_DATA" | jq -r '.number')
-          
+
           if [ -z "$PROJECT_ID" ]; then
             echo "Error: Project 'Aegis AI' not found."
             exit 1
           fi
-          
+
           echo "project_id=$PROJECT_ID" >> $GITHUB_OUTPUT
           echo "project_number=$PROJECT_NUMBER" >> $GITHUB_OUTPUT
-          
+
           # Add the item using the PROJECT_NUMBER
           GH_URL="${{ github.event.issue.html_url || github.event.pull_request.html_url || 'https://github.com/Aegis-AI-Organizations/Aegis-AI-Agent/issues/20' }}"
           ITEM_ID=$(gh project item-add "$PROJECT_NUMBER" --org Aegis-AI-Organizations --url "$GH_URL" --format json -q '.id')
@@ -44,7 +44,7 @@ jobs:
             const { owner, repo } = context.repo;
             const issue_number = context.issue ? context.issue.number : (context.payload.pull_request ? context.payload.pull_request.number : 20);
             const actor = context.actor;
-            
+
             await github.rest.issues.addAssignees({
               owner,
               repo,
@@ -83,7 +83,7 @@ jobs:
           if [[ "$REPO_NAME" == *"Internal"* ]]; then COMPONENT="Internal Tools"; fi
 
           gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_ID" --field "Components" --single-select-option "$COMPONENT"
-          
+
       - name: Update Description
         env:
           GH_TOKEN: ${{ secrets.ORG_PAT }}
@@ -109,7 +109,7 @@ jobs:
           BODY=$(gh issue view "$GH_NUMBER" --json body -q .body 2>/dev/null || gh pr view "$GH_NUMBER" --json body -q .body)
           CLEAN_COMP=$(echo "$COMPONENT" | sed 's/[()]//g' | cut -d' ' -f1)
           NEW_BODY=$(echo "$BODY" | sed "s/\[ \] \(.*$CLEAN_COMP.*\)/\[x\] \1/g")
-          
+
           if [[ "$NEW_BODY" != "$BODY" ]]; then
             gh issue edit "$GH_NUMBER" --body "$NEW_BODY" 2>/dev/null || gh pr edit "$GH_NUMBER" --body "$NEW_BODY"
           fi
