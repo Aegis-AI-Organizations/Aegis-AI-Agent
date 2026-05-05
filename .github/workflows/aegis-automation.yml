@@ -122,9 +122,17 @@ jobs:
           if [[ "$REPO_NAME" == *"Worker-Pentest"* ]]; then COMPONENT="Worker (Pentest)"; fi
           if [[ "$REPO_NAME" == *"Internal"* ]]; then COMPONENT="Internal Tools"; fi
           GH_NUMBER="${{ github.event.issue.number || github.event.pull_request.number || 20 }}"
-          BODY=$(gh issue view "$GH_NUMBER" --json body -q .body 2>/dev/null || gh pr view "$GH_NUMBER" --json body -q .body)
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            TYPE="pr"
+          else
+            TYPE="issue"
+          fi
+          
+          echo "Updating $TYPE #$GH_NUMBER"
+          BODY=$(gh "$TYPE" view "$GH_NUMBER" --repo "$GITHUB_REPOSITORY" --json body -q .body)
           CLEAN_COMP=$(echo "$COMPONENT" | sed 's/[()]//g' | cut -d' ' -f1)
           NEW_BODY=$(echo "$BODY" | sed "s/\[ \] \(.*$CLEAN_COMP.*\)/\[x\] \1/g")
+          
           if [[ "$NEW_BODY" != "$BODY" ]]; then
-            gh issue edit "$GH_NUMBER" --body "$NEW_BODY" 2>/dev/null || gh pr edit "$GH_NUMBER" --body "$NEW_BODY"
+            gh "$TYPE" edit "$GH_NUMBER" --repo "$GITHUB_REPOSITORY" --body "$NEW_BODY"
           fi
