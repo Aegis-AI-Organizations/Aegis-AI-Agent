@@ -9,23 +9,23 @@ pub fn startup_message() -> &'static str {
 }
 
 pub async fn init_agent() -> Result<()> {
-    println!("{}", startup_message());
+    tracing::info!("{}", startup_message());
 
     if std::env::var("SKIP_AGENT_INIT")
         .map(|v| v == "1")
         .unwrap_or(false)
     {
-        println!("Skipping agent initialization (SKIP_AGENT_INIT=1)");
+        tracing::info!("Skipping agent initialization (SKIP_AGENT_INIT=1)");
         return Ok(());
     }
 
     let config = load_or_register_agent().await?;
-    println!("Agent registered/loaded with ID: {}", config.agent_id);
+    tracing::info!("Agent registered/loaded with ID: {}", config.agent_id);
 
     // Start heartbeat in background
     tokio::spawn(async move {
         if let Err(e) = start_heartbeat_loop(config).await {
-            eprintln!("Heartbeat error: {}", e);
+            tracing::error!("Heartbeat error: {}", e);
         }
     });
 
@@ -59,7 +59,7 @@ async fn start_heartbeat_loop(config: AgentConfig) -> Result<()> {
     loop {
         interval.tick().await;
         if let Err(e) = client.send_heartbeat(&config).await {
-            eprintln!("Heartbeat failed: {}", e);
+            tracing::error!("Heartbeat failed: {}", e);
         }
     }
 }

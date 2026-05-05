@@ -1,6 +1,7 @@
 pub mod agent;
 pub mod client;
 pub mod config;
+pub mod error;
 pub mod health;
 pub mod server;
 
@@ -10,16 +11,8 @@ pub fn startup_banner() -> &'static str {
     "Hello, world! Aegis AI Agent is starting..."
 }
 
-pub async fn prepare_run() -> Result<SocketAddr, Box<dyn std::error::Error>> {
-    let load_dotenv = !cfg!(test)
-        && (cfg!(debug_assertions)
-            || std::env::var("LOAD_DOTENV")
-                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-                .unwrap_or(false));
-    if load_dotenv {
-        let _ = dotenvy::dotenv();
-    }
-    println!("{}", startup_banner());
+pub async fn prepare_run() -> anyhow::Result<SocketAddr> {
+    tracing::info!("{}", startup_banner());
 
     // 1. Initialize Agent logic
     agent::init_agent().await?;
@@ -35,7 +28,7 @@ pub async fn prepare_run() -> Result<SocketAddr, Box<dyn std::error::Error>> {
     Ok(addr)
 }
 
-pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
+pub async fn run() -> anyhow::Result<()> {
     let addr = prepare_run().await?;
     server::start_server(addr).await
 }
@@ -55,23 +48,13 @@ mod tests {
 
     #[tokio::test]
     #[serial]
-    async fn test_prepare_run_env_logic() {
-        // Test LOAD_DOTENV=1
+    async fn test_prepare_run_skip_init() {
         unsafe {
-            std::env::set_var("LOAD_DOTENV", "1");
             std::env::set_var("SKIP_AGENT_INIT", "1");
         }
         let _ = prepare_run().await;
 
-        // Test LOAD_DOTENV=true
         unsafe {
-            std::env::set_var("LOAD_DOTENV", "true");
-        }
-        let _ = prepare_run().await;
-
-        // Clean up
-        unsafe {
-            std::env::remove_var("LOAD_DOTENV");
             std::env::remove_var("SKIP_AGENT_INIT");
         }
     }
