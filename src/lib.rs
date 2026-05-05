@@ -38,3 +38,40 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let addr = prepare_run().await?;
     server::start_server(addr).await
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serial_test::serial;
+
+    #[test]
+    fn test_startup_banner() {
+        assert_eq!(
+            startup_banner(),
+            "Hello, world! Aegis AI Agent is starting..."
+        );
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_prepare_run_env_logic() {
+        // Test LOAD_DOTENV=1
+        unsafe {
+            std::env::set_var("LOAD_DOTENV", "1");
+            std::env::set_var("SKIP_AGENT_INIT", "1");
+        }
+        let _ = prepare_run().await;
+
+        // Test LOAD_DOTENV=true
+        unsafe {
+            std::env::set_var("LOAD_DOTENV", "true");
+        }
+        let _ = prepare_run().await;
+
+        // Clean up
+        unsafe {
+            std::env::remove_var("LOAD_DOTENV");
+            std::env::remove_var("SKIP_AGENT_INIT");
+        }
+    }
+}
