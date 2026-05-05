@@ -11,10 +11,11 @@ pub fn startup_banner() -> &'static str {
 }
 
 pub async fn prepare_run() -> Result<SocketAddr, Box<dyn std::error::Error>> {
-    let load_dotenv = !cfg!(test) && (cfg!(debug_assertions)
-        || std::env::var("LOAD_DOTENV")
-            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-            .unwrap_or(false));
+    let load_dotenv = !cfg!(test)
+        && (cfg!(debug_assertions)
+            || std::env::var("LOAD_DOTENV")
+                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                .unwrap_or(false));
     if load_dotenv {
         let _ = dotenvy::dotenv();
     }

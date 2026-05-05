@@ -120,14 +120,17 @@ impl AegisClient {
             anyhow::bail!("Failed to get upload URL: {}", resp.status());
         }
 
-        let link_resp: UploadLinkResponse = resp.json().await.context("Failed to parse upload URL response")?;
-        
+        let link_resp: UploadLinkResponse = resp
+            .json()
+            .await
+            .context("Failed to parse upload URL response")?;
+
         let mut final_url = link_resp.url;
         // WORKAROUND: If we are in local dev, replace docker internal hostname with localhost
         if env::var("AGENT_ALLOW_HTTP").unwrap_or_default() == "true" {
             final_url = final_url.replace("http://minio:9000", "http://localhost:9000");
         }
-        
+
         Ok(final_url)
     }
 
@@ -139,7 +142,7 @@ impl AegisClient {
         loop {
             attempts += 1;
             let mut request = self.client.put(presigned_url).body(data.clone());
-            
+
             // WORKAROUND: If we replaced minio with localhost, we must restore the Host header for S3 signature validation
             if presigned_url.contains("localhost:9000") {
                 request = request.header("Host", "minio:9000");
@@ -149,7 +152,10 @@ impl AegisClient {
 
             match resp {
                 Ok(r) if r.status().is_success() => return Ok(()),
-                Ok(r) if (r.status() == 429 || r.status().is_server_error()) && attempts < max_attempts => {
+                Ok(r)
+                    if (r.status() == 429 || r.status().is_server_error())
+                        && attempts < max_attempts =>
+                {
                     eprintln!(
                         "Upload failed with status {}. Retrying in {:?} (attempt {}/{})",
                         r.status(),
