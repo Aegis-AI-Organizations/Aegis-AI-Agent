@@ -32,7 +32,7 @@ jobs:
           QUERY='query($org: String!, $repo: String!, $number: Int!) {
             organization(login: $org) {
               projectsV2(first: 20) {
-                nodes { id title }
+                nodes { id number title }
               }
             }
             repository(owner: $org, name: $repo) {
@@ -43,9 +43,10 @@ jobs:
           RESULT=$(gh api graphql -f org="$REPO_OWNER" -f repo="$REPO_NAME" -F number=$GH_NUMBER -f query="$QUERY")
 
           PROJECT_ID=$(echo "$RESULT" | jq -r '.data.organization.projectsV2.nodes[] | select(.title == "Aegis AI") | .id')
+          PROJECT_NUMBER=$(echo "$RESULT" | jq -r '.data.organization.projectsV2.nodes[] | select(.title == "Aegis AI") | .number')
           CONTENT_ID=$(echo "$RESULT" | jq -r ".data.repository.${QUERY_TYPE}.id")
 
-          if [ "$PROJECT_ID" == "null" ] || [ "$CONTENT_ID" == "null" ]; then
+          if [ "$PROJECT_ID" == "null" ] || [ -z "$PROJECT_NUMBER" ] || [ "$CONTENT_ID" == "null" ]; then
             echo "Error: Could not resolve IDs. Project: $PROJECT_ID, Content: $CONTENT_ID"
             exit 1
           fi
@@ -60,6 +61,7 @@ jobs:
           ITEM_ID=$(gh api graphql -f project="$PROJECT_ID" -f content="$CONTENT_ID" -f query="$ADD_MUTATION" -q '.data.addProjectV2ItemById.item.id')
 
           echo "project_id=$PROJECT_ID" >> $GITHUB_OUTPUT
+          echo "project_number=$PROJECT_NUMBER" >> $GITHUB_OUTPUT
           echo "item_id=$ITEM_ID" >> $GITHUB_OUTPUT
 
       - name: Auto-Assign Author
@@ -81,13 +83,24 @@ jobs:
           GH_TOKEN: ${{ secrets.ORG_PAT }}
           ITEM_ID: ${{ steps.project_info.outputs.item_id }}
           PROJECT_ID: ${{ steps.project_info.outputs.project_id }}
+          PROJECT_NUMBER: ${{ steps.project_info.outputs.project_number }}
         run: |
+          # Fetch fields JSON
+          FIELDS_JSON=$(gh project field-list "$PROJECT_NUMBER" --owner Aegis-AI-Organizations --format json)
+
           # 1. Set Status based on event type
           STATUS_OPTION="Ready"
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             STATUS_OPTION="In review"
           fi
-          gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_ID" --field "Status" --single-select-option "$STATUS_OPTION"
+          
+          STATUS_FIELD_ID=$(echo "$FIELDS_JSON" | jq -r '.fields[] | select(.name == "Status") | .id')
+          STATUS_OPTION_ID=$(echo "$FIELDS_JSON" | jq -r '.fields[] | select(.name == "Status") | .options[]? | select(.name == "'"$STATUS_OPTION"'") | .id')
+          
+          if [[ -n "$STATUS_FIELD_ID" && "$STATUS_FIELD_ID" != "null" && -n "$STATUS_OPTION_ID" && "$STATUS_OPTION_ID" != "null" ]]; then
+            gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_ID" --field-id "$STATUS_FIELD_ID" --single-select-option-id "$STATUS_OPTION_ID"
+          fi
+
           # 2. Dynamic Component detection
           REPO_NAME="${{ github.event.repository.name }}"
           COMPONENT="Other"
@@ -104,7 +117,13 @@ jobs:
           if [[ "$REPO_NAME" == *"Worker-Fixer"* ]]; then COMPONENT="Worker (Fixer)"; fi
           if [[ "$REPO_NAME" == *"Worker-Pentest"* ]]; then COMPONENT="Worker (Pentest)"; fi
           if [[ "$REPO_NAME" == *"Internal"* ]]; then COMPONENT="Internal Tools"; fi
-          gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_ID" --field "Components" --single-select-option "$COMPONENT"
+          
+          COMP_FIELD_ID=$(echo "$FIELDS_JSON" | jq -r '.fields[] | select(.name == "Components") | .id')
+          COMP_OPTION_ID=$(echo "$FIELDS_JSON" | jq -r '.fields[] | select(.name == "Components") | .options[]? | select(.name == "'"$COMPONENT"'") | .id')
+          
+          if [[ -n "$COMP_FIELD_ID" && "$COMP_FIELD_ID" != "null" && -n "$COMP_OPTION_ID" && "$COMP_OPTION_ID" != "null" ]]; then
+            gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_ID" --field-id "$COMP_FIELD_ID" --single-select-option-id "$COMP_OPTION_ID"
+          fi
 
       - name: Update Description
         env:
