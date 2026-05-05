@@ -1,9 +1,11 @@
 use aegis_ai_agent::health::health_handler;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
+use serial_test::serial;
 use std::env;
 
 #[tokio::test]
+#[serial]
 async fn test_health_handler_ingest_ok() {
     let mut server = mockito::Server::new_async().await;
     let host_port = server.host_with_port();
@@ -31,6 +33,7 @@ async fn test_health_handler_ingest_ok() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_health_handler_ingest_fail() {
     let mut server = mockito::Server::new_async().await;
     let host_port = server.host_with_port();
@@ -58,6 +61,7 @@ async fn test_health_handler_ingest_fail() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_health_handler_ingest_timeout() {
     // Set a port where nothing is listening to trigger an error in reqwest
     unsafe {
