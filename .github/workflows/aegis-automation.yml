@@ -17,20 +17,44 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.ORG_PAT }}
         run: |
-          # Fetch both ID and Number (item-add needs Number, item-edit needs ID)
-          QUERY='query($org: String!) { organization(login: $org) { projectsV2(first: 20) { nodes { id number title } } } }'
-          PROJECT_DATA=$(gh api graphql -f org="Aegis-AI-Organizations" -f query="$QUERY" -q '.data.organization.projectsV2.nodes[] | select(.title == "Aegis AI")')
-          PROJECT_ID=$(echo "$PROJECT_DATA" | jq -r '.id')
-          PROJECT_NUMBER=$(echo "$PROJECT_DATA" | jq -r '.number')
-          if [ -z "$PROJECT_ID" ]; then
-            echo "Error: Project 'Aegis AI' not found."
+          # 1. Get Project ID and Issue/PR Global ID
+          # For testing/manual trigger, we default to issue #20
+          GH_NUMBER="${{ github.event.issue.number || github.event.pull_request.number || 20 }}"
+          REPO_OWNER="${{ github.repository_owner }}"
+          REPO_NAME="${{ github.event.repository.name }}"
+
+          QUERY='query($org: String!, $repo: String!, $number: Int!) {
+            organization(login: $org) {
+              projectsV2(first: 20) {
+                nodes { id title }
+              }
+            }
+            repository(owner: $org, name: $repo) {
+              issue(number: $number) { id }
+              pullRequest(number: $number) { id }
+            }
+          }'
+
+          RESULT=$(gh api graphql -f org="$REPO_OWNER" -f repo="$REPO_NAME" -F number=$GH_NUMBER -f query="$QUERY")
+          
+          PROJECT_ID=$(echo "$RESULT" | jq -r '.data.organization.projectsV2.nodes[] | select(.title == "Aegis AI") | .id')
+          CONTENT_ID=$(echo "$RESULT" | jq -r '.data.repository.issue.id // .data.repository.pullRequest.id')
+
+          if [ "$PROJECT_ID" == "null" ] || [ "$CONTENT_ID" == "null" ]; then
+            echo "Error: Could not resolve IDs. Project: $PROJECT_ID, Content: $CONTENT_ID"
             exit 1
           fi
+
+          # 2. Add Item to Project via GraphQL
+          ADD_MUTATION='mutation($project: ID!, $content: ID!) {
+            addProjectV2ItemById(input: {projectId: $project, contentId: $content}) {
+              item { id }
+            }
+          }'
+
+          ITEM_ID=$(gh api graphql -f project="$PROJECT_ID" -f content="$CONTENT_ID" -f query="$ADD_MUTATION" -q '.data.addProjectV2ItemById.item.id')
+          
           echo "project_id=$PROJECT_ID" >> $GITHUB_OUTPUT
-          echo "project_number=$PROJECT_NUMBER" >> $GITHUB_OUTPUT
-          # Add the item using the PROJECT_NUMBER
-          GH_URL="${{ github.event.issue.html_url || github.event.pull_request.html_url || 'https://github.com/Aegis-AI-Organizations/Aegis-AI-Agent/issues/20' }}"
-          ITEM_ID=$(gh project item-add "$PROJECT_NUMBER" --owner Aegis-AI-Organizations --url "$GH_URL" --format json -q '.id')
           echo "item_id=$ITEM_ID" >> $GITHUB_OUTPUT
 
       - name: Auto-Assign Author
