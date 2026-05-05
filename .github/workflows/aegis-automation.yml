@@ -16,7 +16,7 @@ jobs:
         uses: actions/add-to-project@v1.0.1
         with:
           project-url: https://github.com/orgs/Aegis-AI-Organizations/projects/1
-          github-token: ${{ secrets.AEGIS_PROJECT_TOKEN }}
+          github-token: ${{ secrets.ORG_PAT }}
 
       - name: Auto-Assign Author
         uses: actions/github-script@v7
@@ -35,7 +35,7 @@ jobs:
 
       - name: Set Project Fields
         env:
-          GH_TOKEN: ${{ secrets.AEGIS_PROJECT_TOKEN }}
+          GH_TOKEN: ${{ secrets.ORG_PAT }}
           ITEM_ID: ${{ steps.add_to_project.outputs.item-id }}
           PROJECT_ID: ${{ steps.add_to_project.outputs.project-id }}
         run: |
