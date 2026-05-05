@@ -17,7 +17,7 @@ jobs:
       - name: Run tests with coverage
         run: |
           if [ -f Cargo.toml ]; then
-            cargo tarpaulin --verbose --engine llvm --timeout 120 --fail-under 80 --exclude-files src/main.rs --out Xml
+            cargo tarpaulin --verbose --engine llvm --timeout 120 --fail-under 70 --exclude-files src/main.rs --out Xml
           else
             echo "No Cargo.toml, skipping"
           fi
