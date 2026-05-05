@@ -19,6 +19,7 @@ struct RegisterResponse {
 #[derive(Deserialize)]
 struct UploadLinkResponse {
     url: String,
+    #[allow(dead_code)]
     method: String,
 }
 
@@ -120,7 +121,14 @@ impl AegisClient {
         }
 
         let link_resp: UploadLinkResponse = resp.json().await.context("Failed to parse upload URL response")?;
-        Ok(link_resp.url)
+        
+        let mut final_url = link_resp.url;
+        // WORKAROUND: If we are in local dev, replace docker internal hostname with localhost
+        if env::var("AGENT_ALLOW_HTTP").unwrap_or_default() == "true" {
+            final_url = final_url.replace("http://minio:9000", "http://localhost:9000");
+        }
+        
+        Ok(final_url)
     }
 
     pub async fn upload_payload(&self, presigned_url: &str, data: Vec<u8>) -> Result<()> {
@@ -130,12 +138,14 @@ impl AegisClient {
 
         loop {
             attempts += 1;
-            let resp = self
-                .client
-                .put(presigned_url)
-                .body(data.clone())
-                .send()
-                .await;
+            let mut request = self.client.put(presigned_url).body(data.clone());
+            
+            // WORKAROUND: If we replaced minio with localhost, we must restore the Host header for S3 signature validation
+            if presigned_url.contains("localhost:9000") {
+                request = request.header("Host", "minio:9000");
+            }
+
+            let resp = request.send().await;
 
             match resp {
                 Ok(r) if r.status().is_success() => return Ok(()),
