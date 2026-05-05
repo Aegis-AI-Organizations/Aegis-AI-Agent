@@ -127,12 +127,12 @@ jobs:
           else
             TYPE="issue"
           fi
-          
+
           echo "Updating $TYPE #$GH_NUMBER"
           BODY=$(gh "$TYPE" view "$GH_NUMBER" --repo "$GITHUB_REPOSITORY" --json body -q .body)
           CLEAN_COMP=$(echo "$COMPONENT" | sed 's/[()]//g' | cut -d' ' -f1)
           NEW_BODY=$(echo "$BODY" | sed "s/\[ \] \(.*$CLEAN_COMP.*\)/\[x\] \1/g")
-          
+
           if [[ "$NEW_BODY" != "$BODY" ]]; then
             gh "$TYPE" edit "$GH_NUMBER" --repo "$GITHUB_REPOSITORY" --body "$NEW_BODY"
           fi
