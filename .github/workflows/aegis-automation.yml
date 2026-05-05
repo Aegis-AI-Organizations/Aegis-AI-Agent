@@ -67,7 +67,7 @@ jobs:
         with:
           script: |
             const { owner, repo } = context.repo;
-            const issue_number = context.issue ? context.issue.number : (context.payload.pull_request ? context.payload.pull_request.number : 20);
+            const issue_number = context.payload.issue?.number || context.payload.pull_request?.number || 20;
             const actor = context.actor;
             await github.rest.issues.addAssignees({
               owner,
