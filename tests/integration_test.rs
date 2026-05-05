@@ -68,7 +68,7 @@ async fn test_not_found_integration() {
 fn test_startup_banner() {
     assert_eq!(
         aegis_ai_agent::startup_banner(),
-        "Hello, world! Aegis AI Agent is starting..."
+        "Aegis AI Agent is starting..."
     );
 }
 
