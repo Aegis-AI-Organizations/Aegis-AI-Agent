@@ -9,11 +9,11 @@ pub fn create_router() -> Router {
         .route("/admin/system/health", get(health::health_handler))
 }
 
-pub async fn start_server(addr: SocketAddr) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn start_server(addr: SocketAddr) -> anyhow::Result<()> {
     let app = create_router();
     let listener = TcpListener::bind(addr).await?;
     let local_addr = listener.local_addr()?;
-    println!("Health server listening on {}", local_addr);
+    tracing::info!("Health server listening on {}", local_addr);
     axum::serve(listener, app).await?;
     Ok(())
 }
