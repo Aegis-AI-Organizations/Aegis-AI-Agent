@@ -39,9 +39,12 @@ jobs:
           ITEM_ID: ${{ steps.add_to_project.outputs.item-id }}
           PROJECT_ID: ${{ steps.add_to_project.outputs.project-id }}
         run: |
-          # 1. If PR, set Status to "In review"
+          # 1. Set Status based on event type
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_ID" --field-id "Status" --single-select-option-id "In review"
+          else
+            # It's an issue
+            gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_ID" --field-id "Status" --single-select-option-id "Ready"
           fi
 
           # 2. Set Component to "Agent (Rust)"
