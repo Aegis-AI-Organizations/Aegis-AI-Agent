@@ -54,8 +54,16 @@ jobs:
           if [[ "$REPO_NAME" == *"Agent"* ]]; then COMPONENT="Agent (Rust)"; fi
           if [[ "$REPO_NAME" == *"Gateway"* ]]; then COMPONENT="Gateway (Go)"; fi
           if [[ "$REPO_NAME" == *"Brain"* ]]; then COMPONENT="Brain (Python)"; fi
+          if [[ "$REPO_NAME" == *"Dashboard"* ]]; then COMPONENT="Dashboard (Web)"; fi
+          if [[ "$REPO_NAME" == *"Documentation"* ]]; then COMPONENT="Documentation"; fi
           if [[ "$REPO_NAME" == *"Infra"* ]]; then COMPONENT="Infrastructure (K8s)"; fi
+          if [[ "$REPO_NAME" == *"Landing"* ]]; then COMPONENT="Landing Page"; fi
           if [[ "$REPO_NAME" == *"Proto"* ]]; then COMPONENT="Contracts (Proto)"; fi
+          if [[ "$REPO_NAME" == *"Worker-Ingest"* ]]; then COMPONENT="Worker (Ingest)"; fi
+          if [[ "$REPO_NAME" == *"Worker-Deployer"* ]]; then COMPONENT="Worker (Deployer)"; fi
+          if [[ "$REPO_NAME" == *"Worker-Fixer"* ]]; then COMPONENT="Worker (Fixer)"; fi
+          if [[ "$REPO_NAME" == *"Worker-Pentest"* ]]; then COMPONENT="Worker (Pentest)"; fi
+          if [[ "$REPO_NAME" == *"Internal"* ]]; then COMPONENT="Internal Tools"; fi
 
           gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_ID" --field-id "Components" --single-select-option-id "$COMPONENT"
           
