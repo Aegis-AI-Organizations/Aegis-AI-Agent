@@ -8,7 +8,7 @@ pub mod server;
 use std::net::SocketAddr;
 
 pub fn startup_banner() -> &'static str {
-    "Hello, world! Aegis AI Agent is starting..."
+    "Aegis AI Agent is starting..."
 }
 
 pub async fn prepare_run() -> anyhow::Result<SocketAddr> {

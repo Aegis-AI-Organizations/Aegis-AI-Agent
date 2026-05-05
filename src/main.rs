@@ -15,13 +15,13 @@ async fn main() -> anyhow::Result<()> {
         .expect("Setting default tracing subscriber failed");
 
     // Check mandatory configuration to avoid silent failures later
-    if std::env::var("AEGIS_AUTH_TOKEN").is_err() {
-        error!("Fatal: AEGIS_AUTH_TOKEN is missing. Please set it to start the agent.");
+    if std::env::var("DEPLOYMENT_TOKEN").is_err() {
+        error!("Fatal: DEPLOYMENT_TOKEN is missing. Please set it to start the agent.");
         std::process::exit(1);
     }
 
-    if std::env::var("AEGIS_GATEWAY_URL").is_err() {
-        error!("Fatal: AEGIS_GATEWAY_URL is missing. Please set it to start the agent.");
+    if std::env::var("GATEWAY_URL").is_err() {
+        error!("Fatal: GATEWAY_URL is missing. Please set it to start the agent.");
         std::process::exit(1);
     }
 
