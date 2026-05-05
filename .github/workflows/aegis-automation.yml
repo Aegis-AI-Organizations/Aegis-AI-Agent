@@ -47,9 +47,17 @@ jobs:
             gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_ID" --field-id "Status" --single-select-option-id "Ready"
           fi
 
-          # 2. Set Component to "Agent (Rust)"
-          # Note: We use the option name directly, gh CLI handles finding the ID
-          gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_ID" --field-id "Components" --single-select-option-id "Agent (Rust)"
+          # 2. Dynamic Component detection based on repo name
+          REPO_NAME="${{ github.event.repository.name }}"
+          COMPONENT="Other"
+          
+          if [[ "$REPO_NAME" == *"Agent"* ]]; then COMPONENT="Agent (Rust)"; fi
+          if [[ "$REPO_NAME" == *"Gateway"* ]]; then COMPONENT="Gateway (Go)"; fi
+          if [[ "$REPO_NAME" == *"Brain"* ]]; then COMPONENT="Brain (Python)"; fi
+          if [[ "$REPO_NAME" == *"Infra"* ]]; then COMPONENT="Infrastructure (K8s)"; fi
+          if [[ "$REPO_NAME" == *"Proto"* ]]; then COMPONENT="Contracts (Proto)"; fi
+
+          gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_ID" --field-id "Components" --single-select-option-id "$COMPONENT"
           
           # 3. Auto-Iteration logic (Requires the project to have an active iteration)
           # The gh CLI will automatically pick the 'current' iteration if we don't specify one or if configured
