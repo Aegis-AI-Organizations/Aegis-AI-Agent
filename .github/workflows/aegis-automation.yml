@@ -67,6 +67,19 @@ jobs:
 
           gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_ID" --field-id "Components" --single-select-option-id "$COMPONENT"
           
-          # 3. Auto-Iteration logic (Requires the project to have an active iteration)
-          # The gh CLI will automatically pick the 'current' iteration if we don't specify one or if configured
-          # For now, we set the Component and Status which are the most critical.
+          # 3. Update Issue/PR description to check the corresponding box
+          GH_NUMBER="${{ github.event.issue.number || github.event.pull_request.number }}"
+          # Use GH_TOKEN for reading/editing the body
+          BODY=$(gh issue view "$GH_NUMBER" --json body -q .body 2>/dev/null || gh pr view "$GH_NUMBER" --json body -q .body)
+          
+          # Clean the component name for regex (remove parentheses)
+          CLEAN_COMP=$(echo "$COMPONENT" | sed 's/[()]//g' | cut -d' ' -f1)
+          
+          # Use regex to check the box matching the component name
+          NEW_BODY=$(echo "$BODY" | sed "s/\[ \] \(.*$CLEAN_COMP.*\)/\[x\] \1/g")
+          
+          if [[ "$NEW_BODY" != "$BODY" ]]; then
+            gh issue edit "$GH_NUMBER" --body "$NEW_BODY" 2>/dev/null || gh pr edit "$GH_NUMBER" --body "$NEW_BODY"
+          fi
+
+          # 4. Auto-Iteration logic
