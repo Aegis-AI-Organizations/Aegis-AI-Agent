@@ -36,7 +36,7 @@ jobs:
           }'
 
           RESULT=$(gh api graphql -f org="$REPO_OWNER" -f repo="$REPO_NAME" -F number=$GH_NUMBER -f query="$QUERY")
-          
+
           PROJECT_ID=$(echo "$RESULT" | jq -r '.data.organization.projectsV2.nodes[] | select(.title == "Aegis AI") | .id')
           CONTENT_ID=$(echo "$RESULT" | jq -r '.data.repository.issue.id // .data.repository.pullRequest.id')
 
@@ -53,7 +53,7 @@ jobs:
           }'
 
           ITEM_ID=$(gh api graphql -f project="$PROJECT_ID" -f content="$CONTENT_ID" -f query="$ADD_MUTATION" -q '.data.addProjectV2ItemById.item.id')
-          
+
           echo "project_id=$PROJECT_ID" >> $GITHUB_OUTPUT
           echo "item_id=$ITEM_ID" >> $GITHUB_OUTPUT
 
