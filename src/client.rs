@@ -1,6 +1,7 @@
 use crate::config::AgentConfig;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 
 #[derive(Serialize)]
 struct RegisterRequest {
@@ -26,8 +27,15 @@ pub struct AegisClient {
 
 impl AegisClient {
     pub fn new(gateway_url: String) -> Self {
+        let client = reqwest::Client::builder()
+            .use_rustls_tls()
+            .min_tls_version(reqwest::tls::Version::V1_2)
+            .https_only(!cfg!(test))
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new());
+
         Self {
-            client: reqwest::Client::new(),
+            client,
             gateway_url,
         }
     }
@@ -84,5 +92,45 @@ impl AegisClient {
         }
 
         Ok(())
+    }
+
+    pub async fn upload_payload(&self, presigned_url: &str, data: Vec<u8>) -> Result<()> {
+        let mut attempts = 0;
+        let max_attempts = 5;
+        let mut backoff = Duration::from_secs(2);
+
+        loop {
+            attempts += 1;
+            let resp = self
+                .client
+                .put(presigned_url)
+                .body(data.clone())
+                .send()
+                .await;
+
+            match resp {
+                Ok(r) if r.status().is_success() => return Ok(()),
+                Ok(r) if (r.status() == 429 || r.status().is_server_error()) && attempts < max_attempts => {
+                    eprintln!(
+                        "Upload failed with status {}. Retrying in {:?} (attempt {}/{})",
+                        r.status(),
+                        backoff,
+                        attempts,
+                        max_attempts
+                    );
+                }
+                Err(e) if attempts < max_attempts => {
+                    eprintln!(
+                        "Upload network error: {}. Retrying in {:?} (attempt {}/{})",
+                        e, backoff, attempts, max_attempts
+                    );
+                }
+                Ok(r) => anyhow::bail!("Upload failed with status: {}", r.status()),
+                Err(e) => anyhow::bail!("Upload failed after network error: {}", e),
+            }
+
+            tokio::time::sleep(backoff).await;
+            backoff *= 2;
+        }
     }
 }
