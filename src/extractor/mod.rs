@@ -31,7 +31,7 @@ impl SystemExtractor for SysinfoExtractor {
             let mut sys = sys_arc
                 .lock()
                 .map_err(|_| anyhow::anyhow!("Failed to lock system mutex"))?;
-            sys.refresh_all();
+            sys.refresh_memory();
 
             Ok(HostNode {
                 hostname: System::host_name().unwrap_or_else(|| "unknown".to_string()),
