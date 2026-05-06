@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// Represents the host infrastructure of the client.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -21,11 +21,38 @@ pub struct ProcessNode {
     pub args: Option<Vec<String>>,
 }
 
+/// Represents a Docker/Runtime container.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContainerNode {
+    pub id: String,
+    pub name: String,
+    pub image: String,
+    pub state: String,
+    /// Environment variables (key-value pairs).
+    pub env: HashMap<String, String>,
+}
+
+/// Represents a Kubernetes Pod.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PodNode {
+    pub name: String,
+    pub namespace: String,
+    pub ip: Option<String>,
+    /// Kubernetes labels.
+    pub labels: HashMap<String, String>,
+    /// List of containers within the pod.
+    pub containers: Vec<ContainerNode>,
+}
+
 /// Represents the complete system topology at a given time.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TopologyPayload {
     pub host: HostNode,
     pub processes: Vec<ProcessNode>,
+    /// Optional list of discovered containers (Docker).
+    pub containers: Option<Vec<ContainerNode>>,
+    /// Optional list of discovered pods (Kubernetes).
+    pub pods: Option<Vec<PodNode>>,
 }
 
 /// Interface for system data extraction.
