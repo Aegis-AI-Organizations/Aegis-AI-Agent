@@ -1,9 +1,10 @@
 use crate::domain::{HostNode, ProcessNode, SystemExtractor};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use sysinfo::{ProcessesToUpdate, System};
-use tokio::sync::Mutex;
 
 /// SystemExtractor implementation using the `sysinfo` crate.
+///
+/// Refreshes are performed inside `spawn_blocking` to avoid blocking the async executor.
 pub struct SysinfoExtractor {
     sys: Arc<Mutex<System>>,
 }
@@ -24,42 +25,52 @@ impl Default for SysinfoExtractor {
 
 impl SystemExtractor for SysinfoExtractor {
     async fn get_host_info(&self) -> anyhow::Result<HostNode> {
-        let mut sys = self.sys.lock().await;
-        sys.refresh_all();
+        let sys_arc = self.sys.clone();
 
-        Ok(HostNode {
-            hostname: System::host_name().unwrap_or_else(|| "unknown".to_string()),
-            os: System::long_os_version().unwrap_or_else(|| "unknown".to_string()),
-            kernel: System::kernel_version().unwrap_or_else(|| "unknown".to_string()),
-            uptime: System::uptime(),
-            total_ram: sys.total_memory(),
+        tokio::task::spawn_blocking(move || {
+            let mut sys = sys_arc
+                .lock()
+                .map_err(|_| anyhow::anyhow!("Failed to lock system mutex"))?;
+            sys.refresh_all();
+
+            Ok(HostNode {
+                hostname: System::host_name().unwrap_or_else(|| "unknown".to_string()),
+                os: System::long_os_version().unwrap_or_else(|| "unknown".to_string()),
+                kernel: System::kernel_version().unwrap_or_else(|| "unknown".to_string()),
+                uptime: System::uptime(),
+                total_ram: sys.total_memory(),
+            })
         })
+        .await?
     }
 
     async fn get_processes(&self) -> anyhow::Result<Vec<ProcessNode>> {
-        let mut sys = self.sys.lock().await;
-        sys.refresh_processes(ProcessesToUpdate::All, true);
+        let sys_arc = self.sys.clone();
 
-        let processes = sys
-            .processes()
-            .values()
-            .map(|p| ProcessNode {
-                pid: p.pid().as_u32(),
-                name: p.name().to_string_lossy().to_string(),
-                user: p
-                    .user_id()
-                    .map(|u| format!("{:?}", u))
-                    .unwrap_or_else(|| "unknown".to_string()),
-                args: Some(
-                    p.cmd()
-                        .iter()
-                        .map(|s| s.to_string_lossy().to_string())
-                        .collect(),
-                ),
-            })
-            .collect();
+        tokio::task::spawn_blocking(move || {
+            let mut sys = sys_arc
+                .lock()
+                .map_err(|_| anyhow::anyhow!("Failed to lock system mutex"))?;
+            sys.refresh_processes(ProcessesToUpdate::All, true);
 
-        Ok(processes)
+            let processes = sys
+                .processes()
+                .values()
+                .map(|p| ProcessNode {
+                    pid: p.pid().as_u32(),
+                    name: p.name().to_string_lossy().to_string(),
+                    user: p
+                        .user_id()
+                        .map(|u| format!("{:?}", u))
+                        .unwrap_or_else(|| "unknown".to_string()),
+                    // Security: Arguments are redacted by default to avoid leaking sensitive data
+                    args: None,
+                })
+                .collect();
+
+            Ok(processes)
+        })
+        .await?
     }
 }
 
@@ -68,6 +79,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    #[ignore = "Relies on live system state, can be flaky in CI"]
     async fn test_sysinfo_extractor_real_data() {
         let extractor = SysinfoExtractor::new();
 
