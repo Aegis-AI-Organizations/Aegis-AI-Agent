@@ -10,7 +10,13 @@ async fn main() -> anyhow::Result<()> {
     // Setup tracing logs with RUST_LOG environment variable (default to info)
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
-    let subscriber = FmtSubscriber::builder().with_env_filter(filter).finish();
+    let subscriber = FmtSubscriber::builder()
+        .with_env_filter(filter)
+        .with_timer(tracing_subscriber::fmt::time::ChronoUtc::rfc_3339())
+        .with_thread_ids(true)
+        .with_line_number(true)
+        .with_file(true)
+        .finish();
 
     tracing::subscriber::set_global_default(subscriber)
         .expect("Setting default tracing subscriber failed");
