@@ -21,6 +21,13 @@ pub struct ProcessNode {
     pub args: Option<Vec<String>>,
 }
 
+/// Represents the complete system topology at a given time.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TopologyPayload {
+    pub host: HostNode,
+    pub processes: Vec<ProcessNode>,
+}
+
 /// Interface for system data extraction.
 #[allow(async_fn_in_trait)]
 pub trait SystemExtractor: Send + Sync {
