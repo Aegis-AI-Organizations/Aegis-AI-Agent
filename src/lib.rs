@@ -1,4 +1,5 @@
 pub mod agent;
+pub mod domain;
 pub mod client;
 pub mod config;
 pub mod error;
