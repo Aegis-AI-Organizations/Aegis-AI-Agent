@@ -1,9 +1,9 @@
 pub mod agent;
-pub mod domain;
-pub mod extractor;
 pub mod client;
 pub mod config;
+pub mod domain;
 pub mod error;
+pub mod extractor;
 pub mod health;
 pub mod server;
 
