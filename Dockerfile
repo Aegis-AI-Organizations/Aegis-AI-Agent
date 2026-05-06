@@ -1,5 +1,5 @@
 # Stage 1: Build binary
-FROM rust:alpine AS builder
+FROM rust:1.88-alpine AS builder
 RUN apk add --no-cache musl-dev ca-certificates
 WORKDIR /app
 COPY . .
