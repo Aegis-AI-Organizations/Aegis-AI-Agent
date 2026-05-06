@@ -1,5 +1,5 @@
 use crate::health;
-use axum::{Router, routing::get};
+use axum::{routing::get, Router};
 use std::net::SocketAddr;
 use tokio::net::TcpListener;
 
