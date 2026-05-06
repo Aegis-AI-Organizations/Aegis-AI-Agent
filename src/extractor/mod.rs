@@ -79,7 +79,6 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    #[ignore = "Relies on live system state, can be flaky in CI"]
     async fn test_sysinfo_extractor_real_data() {
         let extractor = SysinfoExtractor::new();
 
