@@ -3,7 +3,7 @@ use std::sync::Arc;
 use sysinfo::{ProcessesToUpdate, System};
 use tokio::sync::Mutex;
 
-/// Implémentation du SystemExtractor utilisant la crate `sysinfo`.
+/// SystemExtractor implementation using the `sysinfo` crate.
 pub struct SysinfoExtractor {
     sys: Arc<Mutex<System>>,
 }
@@ -94,7 +94,7 @@ mod tests {
         println!("Found {} processes", processes.len());
         assert!(!processes.is_empty(), "Process list should not be empty");
 
-        // Vérifie que le processus actuel est présent
+        // Verify that the current process is present
         let current_pid = std::process::id();
         let found = processes.iter().any(|p| p.pid == current_pid);
         assert!(
