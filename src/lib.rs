@@ -1,5 +1,6 @@
 pub mod agent;
 pub mod domain;
+pub mod extractor;
 pub mod client;
 pub mod config;
 pub mod error;

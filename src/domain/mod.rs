@@ -18,3 +18,9 @@ pub struct ProcessNode {
     pub user: String,
     pub args: Option<Vec<String>>,
 }
+
+/// Contrat d'extraction des données système.
+pub trait SystemExtractor: Send + Sync {
+    async fn get_host_info(&self) -> anyhow::Result<HostNode>;
+    async fn get_processes(&self) -> anyhow::Result<Vec<ProcessNode>>;
+}
