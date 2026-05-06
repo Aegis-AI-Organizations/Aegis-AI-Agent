@@ -20,6 +20,7 @@ pub struct ProcessNode {
 }
 
 /// Contrat d'extraction des données système.
+#[allow(async_fn_in_trait)]
 pub trait SystemExtractor: Send + Sync {
     async fn get_host_info(&self) -> anyhow::Result<HostNode>;
     async fn get_processes(&self) -> anyhow::Result<Vec<ProcessNode>>;
