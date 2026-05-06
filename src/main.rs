@@ -1,7 +1,7 @@
+use aegis_ai_agent::domain::SystemExtractor;
 use anyhow::Context;
 use tracing::{error, info};
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
-use aegis_ai_agent::domain::SystemExtractor;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
