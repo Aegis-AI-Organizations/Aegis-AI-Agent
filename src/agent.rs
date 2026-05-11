@@ -66,6 +66,7 @@ async fn load_or_register_agent() -> Result<AgentConfig> {
     Ok(config)
 }
 
+#[doc(hidden)]
 pub async fn load_or_register_agent_exposed() -> Result<AgentConfig> {
     load_or_register_agent().await
 }

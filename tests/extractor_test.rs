@@ -1,6 +1,7 @@
-#[cfg(any(feature = "docker", feature = "k8s"))]
-use aegis_ai_agent::extractor::{ContainerNode, TopologyExtractor};
-use aegis_ai_agent::extractor::{SysinfoExtractor, SystemExtractor};
+use aegis_ai_agent::extractor::{
+    ActiveResource, ContainerNode, PodNode, SysinfoExtractor, SystemExtractor,
+    TopologyExtractor,
+};
 #[cfg(feature = "docker")]
 use aegis_ai_agent::extractor::docker;
 #[cfg(feature = "k8s")]
@@ -11,7 +12,8 @@ use k8s_openapi::api::core::v1::{Container, Pod, PodSpec, PodStatus};
 #[cfg(feature = "k8s")]
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 #[cfg(any(feature = "docker", feature = "k8s"))]
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 #[cfg(any(feature = "docker", feature = "k8s"))]
 fn assert_topology_extractor<T: TopologyExtractor>() {}
@@ -57,6 +59,19 @@ fn test_runtime_extractors_implement_topology_extractor() {
     assert_topology_extractor::<docker::DockerExtractor>();
     #[cfg(feature = "k8s")]
     assert_topology_extractor::<k8s::K8sExtractor>();
+}
+
+#[tokio::test]
+async fn test_topology_extractor_default_resource_filters() {
+    let extractor = FakeTopologyExtractor;
+
+    let containers = extractor.list_active_containers().await.unwrap();
+    let pods = extractor.list_active_pods().await.unwrap();
+
+    assert_eq!(containers.len(), 1);
+    assert_eq!(containers[0].id, "container-1");
+    assert_eq!(pods.len(), 1);
+    assert_eq!(pods[0].name, "api-pod");
 }
 
 #[cfg(feature = "docker")]
@@ -252,4 +267,28 @@ fn test_is_active_pod_filters_completed_pods() {
     assert!(k8s::is_active_pod(&pending));
     assert!(!k8s::is_active_pod(&succeeded));
     assert!(!k8s::is_active_pod(&failed));
+}
+
+struct FakeTopologyExtractor;
+
+impl TopologyExtractor for FakeTopologyExtractor {
+    async fn list_active_resources(&self) -> anyhow::Result<Vec<ActiveResource>> {
+        Ok(vec![
+            ActiveResource::Container(ContainerNode {
+                id: "container-1".to_string(),
+                name: "web".to_string(),
+                image: "nginx".to_string(),
+                state: "running".to_string(),
+                env: BTreeMap::new(),
+            }),
+            ActiveResource::Pod(PodNode {
+                name: "api-pod".to_string(),
+                namespace: "default".to_string(),
+                ip: Some("10.0.0.2".to_string()),
+                labels: BTreeMap::new(),
+                containers: vec![],
+                connections: vec![],
+            }),
+        ])
+    }
 }
