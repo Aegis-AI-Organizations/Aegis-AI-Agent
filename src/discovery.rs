@@ -13,7 +13,7 @@ pub async fn start_discovery_loop(config: AgentConfig) -> Result<()> {
     let client = AegisClient::new(gateway_url);
     let redactor = Redactor::new();
     let sys_extractor = SysinfoExtractor::new();
-    
+
     let mut interval = time::interval(Duration::from_secs(300)); // Every 5 minutes
 
     loop {
@@ -24,21 +24,19 @@ pub async fn start_discovery_loop(config: AgentConfig) -> Result<()> {
             Ok(mut payload) => {
                 // Apply redaction to all text fields in the topology
                 redact_payload(&mut payload, &redactor);
-                
+
                 let filename = format!("topology_{}.json", chrono::Utc::now().timestamp());
                 match client.get_upload_url(&config, &filename).await {
-                    Ok(url) => {
-                        match serde_json::to_vec(&payload) {
-                            Ok(data) => {
-                                if let Err(e) = client.upload_payload(&url, data).await {
-                                    error!("Failed to upload topology payload: {}", e);
-                                } else {
-                                    info!("Topology uploaded successfully as {}", filename);
-                                }
+                    Ok(url) => match serde_json::to_vec(&payload) {
+                        Ok(data) => {
+                            if let Err(e) = client.upload_payload(&url, data).await {
+                                error!("Failed to upload topology payload: {}", e);
+                            } else {
+                                info!("Topology uploaded successfully as {}", filename);
                             }
-                            Err(e) => error!("Failed to serialize topology: {}", e),
                         }
-                    }
+                        Err(e) => error!("Failed to serialize topology: {}", e),
+                    },
                     Err(e) => error!("Failed to get upload URL: {}", e),
                 }
             }
@@ -76,7 +74,7 @@ async fn collect_topology(sys_extractor: &SysinfoExtractor) -> Result<TopologyPa
 fn redact_payload(payload: &mut TopologyPayload, redactor: &Redactor) {
     // Redact host info
     payload.host.hostname = redactor.redact(&payload.host.hostname);
-    
+
     // Redact process info
     for proc in &mut payload.processes {
         proc.name = redactor.redact(&proc.name);
@@ -86,7 +84,7 @@ fn redact_payload(payload: &mut TopologyPayload, redactor: &Redactor) {
             }
         }
     }
-    
+
     // Redact containers
     if let Some(containers) = &mut payload.containers {
         for container in containers {
@@ -96,7 +94,7 @@ fn redact_payload(payload: &mut TopologyPayload, redactor: &Redactor) {
             }
         }
     }
-    
+
     // Redact pods
     if let Some(pods) = &mut payload.pods {
         for pod in pods {
