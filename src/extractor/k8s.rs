@@ -47,7 +47,7 @@ impl SystemExtractor for K8sExtractor {
     }
 }
 
-fn map_pod_to_node(p: Pod) -> PodNode {
+pub fn map_pod_to_node(p: Pod) -> PodNode {
     let metadata = p.metadata;
     let spec = p.spec;
     let status = p.status;
@@ -95,68 +95,6 @@ fn map_pod_to_node(p: Pod) -> PodNode {
         ip: status.as_ref().and_then(|s| s.pod_ip.clone()),
         labels: metadata.labels.unwrap_or_default(),
         containers,
-        connections: Vec::new(), // Neighborhood mapping logic can be added here
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use k8s_openapi::api::core::v1::{Container, PodSpec, PodStatus};
-    use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
-
-    #[test]
-    fn test_map_pod_to_node_basic() {
-        let pod = Pod {
-            metadata: ObjectMeta {
-                name: Some("test-pod".to_string()),
-                namespace: Some("test-ns".to_string()),
-                labels: Some(BTreeMap::from([("app".to_string(), "test".to_string())])),
-                ..Default::default()
-            },
-            spec: Some(PodSpec {
-                containers: vec![Container {
-                    name: "test-container".to_string(),
-                    image: Some("test-image".to_string()),
-                    ..Default::default()
-                }],
-                ..Default::default()
-            }),
-            status: Some(PodStatus {
-                pod_ip: Some("10.0.0.1".to_string()),
-                ..Default::default()
-            }),
-        };
-
-        let node = map_pod_to_node(pod);
-        assert_eq!(node.name, "test-pod");
-        assert_eq!(node.namespace, "test-ns");
-        assert_eq!(node.ip, Some("10.0.0.1".to_string()));
-        assert_eq!(node.labels.get("app").unwrap(), "test");
-        assert_eq!(node.containers.len(), 1);
-        assert_eq!(node.containers[0].name, "test-container");
-    }
-
-    #[test]
-    fn test_map_pod_to_node_redaction() {
-        let pod = Pod {
-            spec: Some(PodSpec {
-                containers: vec![Container {
-                    name: "c1".to_string(),
-                    env: Some(vec![k8s_openapi::api::core::v1::EnvVar {
-                        name: "SECRET_KEY".to_string(),
-                        value: Some("super-secret".to_string()),
-                        ..Default::default()
-                    }]),
-                    ..Default::default()
-                }],
-                ..Default::default()
-            }),
-            ..Default::default()
-        };
-
-        let node = map_pod_to_node(pod);
-        let env = &node.containers[0].env;
-        assert_eq!(env.get("SECRET_KEY").unwrap(), "<redacted>");
+        connections: Vec::new(),
     }
 }
