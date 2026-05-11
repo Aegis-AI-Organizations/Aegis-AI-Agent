@@ -1,6 +1,6 @@
 # Stage 1: Build binary
 FROM rust:1.88-alpine AS builder
-RUN apk add --no-cache musl-dev ca-certificates
+RUN apk add --no-cache musl-dev ca-certificates g++ cmake
 WORKDIR /app
 COPY . .
 RUN cargo build --release --target x86_64-unknown-linux-musl
