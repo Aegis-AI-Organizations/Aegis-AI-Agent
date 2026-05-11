@@ -164,3 +164,101 @@ fn test_network_topology_json_matches_protobuf_contract() {
 
     serde_json::from_str::<NetworkTopologyPayload>(&json).unwrap();
 }
+
+#[test]
+fn test_topology_edge_cases() {
+    use aegis_ai_agent::domain::{ProtoContainer, ProtoProcess};
+    let redactor = Redactor::new();
+
+    // 1. Test redact_payload with host.id != host.hostname
+    let mut payload = NetworkTopologyPayload {
+        hosts: vec![aegis_ai_agent::domain::ProtoHost {
+            id: "AKIA1234567890ABCDEF".to_string(), // Secret ID
+            hostname: "normal-host".to_string(),
+            ip_addresses: vec![],
+            containers: vec![ProtoContainer {
+                id: "".to_string(), // Empty ID for fallback key
+                name: "api".to_string(),
+                image: "nginx".to_string(),
+                processes: vec![ProtoProcess {
+                    pid: 1,
+                    name: "super-secret-process-AKIA1234567890ABCDEF".to_string(),
+                    command_line: None,
+                    user: None,
+                }],
+                ports: vec![],
+            }],
+            processes: vec![],
+        }],
+    };
+
+    redact_payload(&mut payload, &redactor);
+
+    assert_eq!(payload.hosts[0].id, "<REDACTED_AWS_KEY>");
+    assert_eq!(
+        payload.hosts[0].containers[0].processes[0].name,
+        "super-secret-process-<REDACTED_AWS_KEY>"
+    );
+
+    // 2. Test build_network_topology with containers missing IDs (fallback key)
+    let payload2 = build_network_topology(
+        HostNode {
+            hostname: "host".to_string(),
+            os: "os".to_string(),
+            kernel: "k".to_string(),
+            uptime: 0,
+            total_ram: 0,
+        },
+        vec![],
+        vec![ContainerNode {
+            id: "".to_string(),
+            name: "nameless".to_string(),
+            image: "image".to_string(),
+            state: "running".to_string(),
+            env: BTreeMap::new(),
+        }],
+        vec![],
+    );
+    assert_eq!(payload2.hosts[0].containers[0].name, "nameless");
+}
+
+#[test]
+fn test_merge_container_edge_cases() {
+    // Test merging when first container has "unknown" image or empty ID
+    // We can trigger this by having a Docker container and a K8s pod with same ID
+    let payload = build_network_topology(
+        HostNode {
+            hostname: "h".to_string(),
+            os: "o".to_string(),
+            kernel: "k".to_string(),
+            uptime: 0,
+            total_ram: 0,
+        },
+        vec![],
+        vec![ContainerNode {
+            id: "id123".to_string(),
+            name: "api".to_string(),
+            image: "unknown".to_string(), // Trigger image merge
+            state: "running".to_string(),
+            env: BTreeMap::new(),
+        }],
+        vec![PodNode {
+            name: "pod".to_string(),
+            namespace: "ns".to_string(),
+            ip: None,
+            labels: BTreeMap::new(),
+            containers: vec![ContainerNode {
+                id: "docker://id123".to_string(),
+                name: "api".to_string(),
+                image: "real-image".to_string(),
+                state: "running".to_string(),
+                env: BTreeMap::new(),
+            }],
+            connections: vec![],
+        }],
+    );
+
+    let container = &payload.hosts[0].containers[0];
+    assert_eq!(container.id, "id123");
+    assert_eq!(container.image, "real-image");
+}
