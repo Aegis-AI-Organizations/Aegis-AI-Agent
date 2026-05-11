@@ -1,6 +1,5 @@
 use aegis_ai_agent::client::AegisClient;
 use aegis_ai_agent::config::AgentConfig;
-use mockito;
 
 #[tokio::test]
 async fn test_register_success() {
