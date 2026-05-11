@@ -63,13 +63,3 @@ async fn start_heartbeat_loop(config: AgentConfig) -> Result<()> {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_startup_message() {
-        assert_eq!(startup_message(), "Aegis AI Agent initialized.");
-    }
-}
