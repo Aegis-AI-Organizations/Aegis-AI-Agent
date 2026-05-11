@@ -128,8 +128,12 @@ async fn test_run_failure() {
 async fn test_agent_init() {
     unsafe {
         env::set_var("SKIP_AGENT_INIT", "1");
+        env::set_var("SKIP_AGENT_LOOPS", "1");
     }
     aegis_ai_agent::agent::init_agent().await.unwrap();
+    unsafe {
+        env::remove_var("SKIP_AGENT_LOOPS");
+    }
 }
 
 #[tokio::test]
@@ -141,6 +145,7 @@ async fn test_binary_startup() {
     let binary_path = env!("CARGO_BIN_EXE_aegis-ai-agent");
     let child = Command::new(binary_path)
         .env("SKIP_AGENT_INIT", "1")
+        .env("SKIP_AGENT_LOOPS", "1")
         .stdout(Stdio::piped())
         .spawn();
 

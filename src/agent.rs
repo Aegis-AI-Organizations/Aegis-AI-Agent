@@ -22,6 +22,14 @@ pub async fn init_agent() -> Result<()> {
     let config = load_or_register_agent().await?;
     tracing::info!("Agent registered/loaded with ID: {}", config.agent_id);
 
+    if std::env::var("SKIP_AGENT_LOOPS")
+        .map(|v| v == "1")
+        .unwrap_or(false)
+    {
+        tracing::info!("Skipping agent background loops (SKIP_AGENT_LOOPS=1)");
+        return Ok(());
+    }
+
     // Start discovery and heartbeat in background
     let config_clone = config.clone();
     tokio::spawn(async move {

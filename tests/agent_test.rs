@@ -113,6 +113,7 @@ async fn test_init_agent_loads_local_config() {
 
     unsafe {
         env::remove_var("SKIP_AGENT_INIT");
+        env::set_var("SKIP_AGENT_LOOPS", "1");
         env::set_var("AGENT_SECRET_FILE_OVERRIDE", config_path.to_str().unwrap());
         env::set_var("GATEWAY_URL", server.url());
         env::set_var("AGENT_ALLOW_HTTP", "true");
@@ -126,5 +127,6 @@ async fn test_init_agent_loads_local_config() {
         env::remove_var("AGENT_SECRET_FILE_OVERRIDE");
         env::remove_var("GATEWAY_URL");
         env::remove_var("AGENT_ALLOW_HTTP");
+        env::remove_var("SKIP_AGENT_LOOPS");
     }
 }
