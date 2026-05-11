@@ -1,19 +1,18 @@
-use aegis_ai_agent::extractor::{
-    ActiveResource, ContainerNode, PodNode, SysinfoExtractor, SystemExtractor,
-    TopologyExtractor,
-};
 #[cfg(feature = "docker")]
 use aegis_ai_agent::extractor::docker;
 #[cfg(feature = "k8s")]
 use aegis_ai_agent::extractor::k8s;
+use aegis_ai_agent::extractor::{
+    ActiveResource, ContainerNode, PodNode, SysinfoExtractor, SystemExtractor, TopologyExtractor,
+};
 
 #[cfg(feature = "k8s")]
 use k8s_openapi::api::core::v1::{Container, Pod, PodSpec, PodStatus};
 #[cfg(feature = "k8s")]
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
+use std::collections::BTreeMap;
 #[cfg(any(feature = "docker", feature = "k8s"))]
 use std::collections::HashMap;
-use std::collections::BTreeMap;
 
 #[cfg(any(feature = "docker", feature = "k8s"))]
 fn assert_topology_extractor<T: TopologyExtractor>() {}

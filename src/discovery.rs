@@ -59,7 +59,12 @@ pub async fn collect_topology(sys_extractor: &SysinfoExtractor) -> Result<Networ
     let mut containers = Vec::new();
     #[cfg(feature = "docker")]
     if let Ok(docker_extractor) = crate::extractor::DockerExtractor::new() {
-        match tokio::time::timeout(Duration::from_secs(5), docker_extractor.list_active_containers()).await {
+        match tokio::time::timeout(
+            Duration::from_secs(5),
+            docker_extractor.list_active_containers(),
+        )
+        .await
+        {
             Ok(Ok(discovered)) => containers.extend(discovered),
             Ok(Err(e)) => info!("Docker topology extraction skipped: {}", e),
             Err(_) => info!("Docker topology extraction timed out after 5s"),
@@ -70,9 +75,16 @@ pub async fn collect_topology(sys_extractor: &SysinfoExtractor) -> Result<Networ
     let mut pods = Vec::new();
     #[cfg(feature = "k8s")]
     if std::env::var("KUBERNETES_SERVICE_HOST").is_ok() {
-        match tokio::time::timeout(Duration::from_secs(5), crate::extractor::K8sExtractor::new()).await {
+        match tokio::time::timeout(
+            Duration::from_secs(5),
+            crate::extractor::K8sExtractor::new(),
+        )
+        .await
+        {
             Ok(Ok(k8s_extractor)) => {
-                match tokio::time::timeout(Duration::from_secs(5), k8s_extractor.list_active_pods()).await {
+                match tokio::time::timeout(Duration::from_secs(5), k8s_extractor.list_active_pods())
+                    .await
+                {
                     Ok(Ok(discovered)) => pods.extend(discovered),
                     Ok(Err(e)) => info!("Kubernetes topology extraction skipped: {}", e),
                     Err(_) => info!("Kubernetes topology extraction timed out after 5s"),
@@ -119,10 +131,10 @@ pub fn redact_payload(payload: &mut NetworkTopologyPayload, redactor: &Redactor)
     for host in &mut payload.hosts {
         let original_hostname = host.hostname.clone();
         let original_id = host.id.clone();
-        
+
         let redacted_hostname = redactor.redact(&original_hostname);
         host.hostname = redacted_hostname.clone();
-        
+
         // If ID matches hostname, keep them consistent. Otherwise redact ID separately.
         host.id = if original_id == original_hostname {
             redacted_hostname
