@@ -1,6 +1,7 @@
 use aegis_ai_agent::config::*;
 use serial_test::serial;
 use std::env;
+use std::fs;
 
 #[test]
 #[serial]
@@ -42,9 +43,43 @@ fn test_get_deployment_token_error() {
 #[serial]
 fn test_get_deployment_token_ok() {
     unsafe {
+        env::set_var(
+            "DEPLOYMENT_TOKEN",
+            "ag_0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefg",
+        );
+    }
+    assert_eq!(
+        get_deployment_token().unwrap(),
+        "ag_0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefg"
+    );
+}
+
+#[test]
+#[serial]
+fn test_get_deployment_token_invalid_format() {
+    unsafe {
         env::set_var("DEPLOYMENT_TOKEN", "secret-token");
     }
-    assert_eq!(get_deployment_token().unwrap(), "secret-token");
+    assert!(get_deployment_token().is_err());
+}
+
+#[test]
+fn test_is_valid_deployment_token() {
+    assert!(is_valid_deployment_token(
+        "ag_0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefg"
+    ));
+    assert!(is_valid_deployment_token(
+        "ag_0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefg_-"
+    ));
+    assert!(!is_valid_deployment_token(
+        "ag_0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef"
+    ));
+    assert!(!is_valid_deployment_token(
+        "xx_0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefg"
+    ));
+    assert!(!is_valid_deployment_token(
+        "ag_0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef!"
+    ));
 }
 
 #[test]
@@ -73,6 +108,26 @@ fn test_save_and_load_config() {
 
     assert_eq!(loaded.agent_id, "test-id");
     assert_eq!(loaded.agent_secret, "test-secret");
+
+    unsafe {
+        env::remove_var("AGENT_SECRET_FILE_OVERRIDE");
+    }
+}
+
+#[test]
+#[serial]
+fn test_load_local_config_invalid_json() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config_path = temp_dir.path().join(".agent_secret_invalid");
+    fs::write(&config_path, "{invalid-json").unwrap();
+
+    unsafe {
+        env::set_var("AGENT_SECRET_FILE_OVERRIDE", config_path.to_str().unwrap());
+    }
+
+    let result = load_local_config();
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("parse"));
 
     unsafe {
         env::remove_var("AGENT_SECRET_FILE_OVERRIDE");
