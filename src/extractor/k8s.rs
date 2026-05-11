@@ -95,7 +95,7 @@ fn map_pod_to_node(p: Pod) -> PodNode {
         ip: status.as_ref().and_then(|s| s.pod_ip.clone()),
         labels: metadata.labels.unwrap_or_default(),
         containers,
-        connections: Vec::new(), // Neighborhood mapping logic can be added here
+        connections: Vec::new(),
     }
 }
 
@@ -158,5 +158,40 @@ mod tests {
         let node = map_pod_to_node(pod);
         let env = &node.containers[0].env;
         assert_eq!(env.get("SECRET_KEY").unwrap(), "<redacted>");
+    }
+
+    #[test]
+    fn test_map_pod_to_node_enrichment() {
+        let pod = Pod {
+            metadata: ObjectMeta {
+                name: Some("test-pod".to_string()),
+                ..Default::default()
+            },
+            spec: Some(PodSpec {
+                containers: vec![Container {
+                    name: "c1".to_string(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }),
+            status: Some(PodStatus {
+                container_statuses: Some(vec![k8s_openapi::api::core::v1::ContainerStatus {
+                    name: "c1".to_string(),
+                    container_id: Some("docker://id123".to_string()),
+                    state: Some(k8s_openapi::api::core::v1::ContainerState {
+                        running: Some(k8s_openapi::api::core::v1::ContainerStateRunning {
+                            started_at: None,
+                        }),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                }]),
+                ..Default::default()
+            }),
+        };
+
+        let node = map_pod_to_node(pod);
+        assert_eq!(node.containers[0].id, "docker://id123");
+        assert!(node.containers[0].state.contains("running"));
     }
 }

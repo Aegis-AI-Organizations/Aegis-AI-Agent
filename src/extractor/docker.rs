@@ -44,64 +44,71 @@ impl SystemExtractor for DockerExtractor {
 
         let mut nodes = Vec::new();
         for c in containers {
-            let id = c.id.clone().unwrap_or_else(|| "unknown".to_string());
-            let raw_name = c
-                .names
-                .as_ref()
-                .and_then(|n| n.first())
-                .cloned()
-                .unwrap_or_else(|| id.clone());
+            nodes.push(map_container_to_node(c, None));
+        }
 
-            let name = normalize_container_name(&raw_name);
-            let image = c.image.clone().unwrap_or_else(|| "unknown".to_string());
-            let state = c.state.clone().unwrap_or_else(|| "unknown".to_string());
-
-            let mut env = BTreeMap::new();
-
-            // Detailed inspection to get real environment variables
-            match self.docker.inspect_container(&id, None).await {
-                Ok(inspect) => {
-                    if let Some(config) = inspect.config {
-                        if let Some(envs) = config.env {
-                            for e in envs {
-                                let parts: Vec<&str> = e.splitn(2, '=').collect();
-                                if parts.len() == 2 {
-                                    let key = parts[0].to_string();
-                                    let val = if is_sensitive_key(&key) {
-                                        "<redacted>".to_string()
-                                    } else {
-                                        parts[1].to_string()
-                                    };
-                                    env.insert(key, val);
-                                }
-                            }
-                        }
-                    }
-                }
-                Err(e) => {
-                    tracing::warn!(
-                        "Failed to inspect container {}: {}. Falling back to labels.",
-                        id,
-                        e
-                    );
-                    if let Some(labels) = c.labels {
-                        for (k, v) in labels {
-                            env.insert(format!("label:{}", k), v);
-                        }
-                    }
-                }
-            }
-
-            nodes.push(ContainerNode {
-                id,
-                name,
-                image,
-                state,
-                env,
-            });
+        // Second pass: enrich with detailed info if possible
+        for node in &mut nodes {
+             if let Ok(inspect) = self.docker.inspect_container(&node.id, None).await {
+                 enrich_node_with_inspect(node, inspect);
+             }
         }
 
         Ok(nodes)
+    }
+}
+
+fn map_container_to_node(c: bollard::models::ContainerSummary, inspect: Option<bollard::models::ContainerInspectResponse>) -> ContainerNode {
+    let id = c.id.unwrap_or_else(|| "unknown".to_string());
+    let raw_name = c
+        .names
+        .as_ref()
+        .and_then(|n| n.first())
+        .cloned()
+        .unwrap_or_else(|| id.clone());
+
+    let name = normalize_container_name(&raw_name);
+    let image = c.image.unwrap_or_else(|| "unknown".to_string());
+    let state = c.state.unwrap_or_else(|| "unknown".to_string());
+
+    let mut env = BTreeMap::new();
+    if let Some(labels) = c.labels {
+        for (k, v) in labels {
+            env.insert(format!("label:{}", k), v);
+        }
+    }
+
+    let mut node = ContainerNode {
+        id,
+        name,
+        image,
+        state,
+        env,
+    };
+
+    if let Some(ins) = inspect {
+        enrich_node_with_inspect(&mut node, ins);
+    }
+
+    node
+}
+
+fn enrich_node_with_inspect(node: &mut ContainerNode, inspect: bollard::models::ContainerInspectResponse) {
+    if let Some(config) = inspect.config {
+        if let Some(envs) = config.env {
+            for e in envs {
+                let parts: Vec<&str> = e.splitn(2, '=').collect();
+                if parts.len() == 2 {
+                    let key = parts[0].to_string();
+                    let val = if is_sensitive_key(&key) {
+                        "<redacted>".to_string()
+                    } else {
+                        parts[1].to_string()
+                    };
+                    node.env.insert(key, val);
+                }
+            }
+        }
     }
 }
 
@@ -111,7 +118,7 @@ fn normalize_container_name(name: &str) -> String {
 
 fn is_sensitive_key(key: &str) -> bool {
     let k = key.to_uppercase();
-    k.contains("PASSWORD")
+    k.contains("PASS")
         || k.contains("SECRET")
         || k.contains("TOKEN")
         || k.contains("KEY")
@@ -135,5 +142,50 @@ mod tests {
         assert!(is_sensitive_key("APP_SECRET"));
         assert!(!is_sensitive_key("APP_NAME"));
         assert!(!is_sensitive_key("DB_HOST"));
+    }
+
+    #[test]
+    fn test_map_container_to_node_basic() {
+        let summary = bollard::models::ContainerSummary {
+            id: Some("1234567890abcdef".to_string()),
+            names: Some(vec!["/test-container".to_string()]),
+            image: Some("nginx:latest".to_string()),
+            state: Some("running".to_string()),
+            labels: Some(std::collections::HashMap::from([("version".to_string(), "1.0".to_string())])),
+            ..Default::default()
+        };
+
+        let node = map_container_to_node(summary, None);
+        assert_eq!(node.id, "1234567890abcdef");
+        assert_eq!(node.name, "test-container");
+        assert_eq!(node.image, "nginx:latest");
+        assert_eq!(node.state, "running");
+        assert_eq!(node.env.get("label:version").unwrap(), "1.0");
+    }
+
+    #[test]
+    fn test_enrich_node_with_inspect() {
+        let mut node = ContainerNode {
+            id: "123".to_string(),
+            name: "test".to_string(),
+            image: "img".to_string(),
+            state: "stat".to_string(),
+            env: BTreeMap::new(),
+        };
+
+        let inspect = bollard::models::ContainerInspectResponse {
+            config: Some(bollard::models::ContainerConfig {
+                env: Some(vec![
+                    "DB_USER=admin".to_string(),
+                    "DB_PASS=secret123".to_string(),
+                ]),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        enrich_node_with_inspect(&mut node, inspect);
+        assert_eq!(node.env.get("DB_USER").unwrap(), "admin");
+        assert_eq!(node.env.get("DB_PASS").unwrap(), "<redacted>");
     }
 }
