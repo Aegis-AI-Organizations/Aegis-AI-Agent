@@ -3,6 +3,9 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 
+pub const DEPLOYMENT_TOKEN_PREFIX: &str = "ag_";
+pub const DEPLOYMENT_TOKEN_BODY_MIN_LEN: usize = 43;
+
 pub fn get_agent_secret_file() -> String {
     std::env::var("AGENT_SECRET_FILE_OVERRIDE").unwrap_or_else(|_| ".agent_secret".to_string())
 }
@@ -59,11 +62,34 @@ pub fn get_gateway_url() -> String {
 }
 
 pub fn get_deployment_token() -> Result<String> {
-    std::env::var("DEPLOYMENT_TOKEN").context("DEPLOYMENT_TOKEN environment variable is required")
+    let token = std::env::var("DEPLOYMENT_TOKEN")
+        .context("DEPLOYMENT_TOKEN environment variable is required")?
+        .trim()
+        .to_string();
+
+    if !is_valid_deployment_token(&token) {
+        anyhow::bail!(
+            "DEPLOYMENT_TOKEN must match the Aegis deployment token format: ag_<{}+ URL-safe chars>",
+            DEPLOYMENT_TOKEN_BODY_MIN_LEN
+        );
+    }
+
+    Ok(token)
 }
 
 pub fn get_agent_name() -> String {
     std::env::var("AGENT_NAME").unwrap_or_else(|_| "rust-agent-01".to_string())
+}
+
+pub fn is_valid_deployment_token(token: &str) -> bool {
+    let Some(body) = token.strip_prefix(DEPLOYMENT_TOKEN_PREFIX) else {
+        return false;
+    };
+
+    body.len() >= DEPLOYMENT_TOKEN_BODY_MIN_LEN
+        && body
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
 }
 
 #[cfg(test)]
@@ -112,9 +138,43 @@ mod tests {
     #[serial]
     fn test_get_deployment_token_ok() {
         unsafe {
+            env::set_var(
+                "DEPLOYMENT_TOKEN",
+                "ag_0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefg",
+            );
+        }
+        assert_eq!(
+            get_deployment_token().unwrap(),
+            "ag_0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefg"
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn test_get_deployment_token_invalid_format() {
+        unsafe {
             env::set_var("DEPLOYMENT_TOKEN", "secret-token");
         }
-        assert_eq!(get_deployment_token().unwrap(), "secret-token");
+        assert!(get_deployment_token().is_err());
+    }
+
+    #[test]
+    fn test_is_valid_deployment_token() {
+        assert!(is_valid_deployment_token(
+            "ag_0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefg"
+        ));
+        assert!(is_valid_deployment_token(
+            "ag_0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefg_-"
+        ));
+        assert!(!is_valid_deployment_token(
+            "ag_0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef"
+        ));
+        assert!(!is_valid_deployment_token(
+            "xx_0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefg"
+        ));
+        assert!(!is_valid_deployment_token(
+            "ag_0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef!"
+        ));
     }
 
     #[test]

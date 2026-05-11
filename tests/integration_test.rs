@@ -134,7 +134,6 @@ async fn test_agent_init() {
 
 #[tokio::test]
 async fn test_binary_startup() {
-    use std::io::{BufRead, BufReader};
     use std::process::{Command, Stdio};
 
     // Attempt to run the binary.
@@ -146,23 +145,9 @@ async fn test_binary_startup() {
         .spawn();
 
     if let Ok(mut child) = child {
-        let stdout = child.stdout.take().unwrap();
-        let reader = BufReader::new(stdout);
-
-        // Wait for the banner to appear or timeout
-        // We'll give it 1 second max
-        let start = std::time::Instant::now();
-        for line in reader.lines() {
-            if let Ok(l) = line {
-                if l.contains("Aegis AI Agent is starting") {
-                    break;
-                }
-            }
-            if start.elapsed().as_secs() > 1 {
-                break;
-            }
-        }
-
+        tokio::time::sleep(tokio::time::Duration::from_millis(250)).await;
+        assert!(child.try_wait().unwrap().is_none());
         child.kill().ok();
+        child.wait().ok();
     }
 }

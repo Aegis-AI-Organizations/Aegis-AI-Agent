@@ -32,8 +32,8 @@ if [ ! -f "$CONFIG_DIR/agent.env" ]; then
     echo "Creating environment template at $CONFIG_DIR/agent.env"
     cat <<EOF > "$CONFIG_DIR/agent.env"
 # Aegis AI Agent Configuration
-GATEWAY_URL=https://brain.aegis-ai.com
-DEPLOYMENT_TOKEN=YOUR_DEPLOYMENT_TOKEN
+GATEWAY_URL=https://api.aegis.ai
+DEPLOYMENT_TOKEN=ag_<43+_URL_SAFE_CHARS>
 INGEST_HOST=localhost
 INGEST_PORT=7233
 # Bind health checks to localhost by default. Change to 0.0.0.0 only if

@@ -1,4 +1,4 @@
-use crate::config::AgentConfig;
+use crate::config::{is_valid_deployment_token, AgentConfig};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::env;
@@ -50,6 +50,10 @@ impl AegisClient {
     }
 
     pub async fn register(&self, deploy_token: &str, agent_name: String) -> Result<AgentConfig> {
+        if !is_valid_deployment_token(deploy_token) {
+            anyhow::bail!("Invalid deployment token format");
+        }
+
         let resp = self
             .client
             .post(format!("{}/api/agents/register", self.gateway_url))
@@ -200,7 +204,10 @@ mod tests {
 
         let client = AegisClient::new(url);
         let config = client
-            .register("token", "agent-01".to_string())
+            .register(
+                "ag_0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefg",
+                "agent-01".to_string(),
+            )
             .await
             .unwrap();
 
@@ -221,10 +228,32 @@ mod tests {
             .await;
 
         let client = AegisClient::new(url);
-        let result = client.register("token", "agent-01".to_string()).await;
+        let result = client
+            .register(
+                "ag_0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefg",
+                "agent-01".to_string(),
+            )
+            .await;
 
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("401"));
+    }
+
+    #[tokio::test]
+    async fn test_register_invalid_deployment_token_format() {
+        let server = mockito::Server::new_async().await;
+        let url = server.url();
+        let client = AegisClient::new(url);
+
+        let result = client
+            .register("ag_too-short", "agent-01".to_string())
+            .await;
+
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid deployment token format"));
     }
 
     #[tokio::test]
