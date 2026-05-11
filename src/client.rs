@@ -278,6 +278,28 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_heartbeat_failure() {
+        let mut server = mockito::Server::new_async().await;
+        let url = server.url();
+
+        let _m = server
+            .mock("POST", "/api/agents/123/status")
+            .with_status(503)
+            .create_async()
+            .await;
+
+        let client = AegisClient::new(url);
+        let config = AgentConfig {
+            agent_id: "123".to_string(),
+            agent_secret: "abc".to_string(),
+        };
+
+        let result = client.send_heartbeat(&config).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("503"));
+    }
+
+    #[tokio::test]
     async fn test_get_upload_url_success() {
         let mut server = mockito::Server::new_async().await;
         let url = server.url();
@@ -302,6 +324,59 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_get_upload_url_failure() {
+        let mut server = mockito::Server::new_async().await;
+        let url = server.url();
+
+        let _m = server
+            .mock("GET", "/api/agents/123/upload-url?filename=test.txt")
+            .with_status(404)
+            .create_async()
+            .await;
+
+        let client = AegisClient::new(url);
+        let config = AgentConfig {
+            agent_id: "123".to_string(),
+            agent_secret: "abc".to_string(),
+        };
+
+        let result = client.get_upload_url(&config, "test.txt").await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("404"));
+    }
+
+    #[tokio::test]
+    async fn test_get_upload_url_local_dev_rewrites_minio_host() {
+        let mut server = mockito::Server::new_async().await;
+        let url = server.url();
+
+        let _m = server
+            .mock("GET", "/api/agents/123/upload-url?filename=test.txt")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"url": "http://minio:9000/upload", "method": "PUT"}"#)
+            .create_async()
+            .await;
+
+        unsafe {
+            env::set_var("AGENT_ALLOW_HTTP", "true");
+        }
+
+        let client = AegisClient::new(url);
+        let config = AgentConfig {
+            agent_id: "123".to_string(),
+            agent_secret: "abc".to_string(),
+        };
+
+        let result = client.get_upload_url(&config, "test.txt").await.unwrap();
+        assert_eq!(result, "http://localhost:9000/upload");
+
+        unsafe {
+            env::remove_var("AGENT_ALLOW_HTTP");
+        }
+    }
+
+    #[tokio::test]
     async fn test_upload_payload_immediate_success() {
         let mut server = mockito::Server::new_async().await;
         let url = server.url();
@@ -317,6 +392,25 @@ mod tests {
         let client = AegisClient::new(url);
         let result = client.upload_payload(&full_url, vec![1, 2, 3]).await;
         assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_upload_payload_non_retryable_failure() {
+        let mut server = mockito::Server::new_async().await;
+        let url = server.url();
+        let upload_path = "/bad-request";
+        let full_url = format!("{}{}", url, upload_path);
+
+        let _m = server
+            .mock("PUT", upload_path)
+            .with_status(400)
+            .create_async()
+            .await;
+
+        let client = AegisClient::new(url);
+        let result = client.upload_payload(&full_url, vec![1, 2, 3]).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("400"));
     }
 
     /*

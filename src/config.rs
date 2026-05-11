@@ -208,4 +208,24 @@ mod tests {
             env::remove_var("AGENT_SECRET_FILE_OVERRIDE");
         }
     }
+
+    #[test]
+    #[serial]
+    fn test_load_local_config_invalid_json() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let config_path = temp_dir.path().join(".agent_secret_invalid");
+        fs::write(&config_path, "{invalid-json").unwrap();
+
+        unsafe {
+            env::set_var("AGENT_SECRET_FILE_OVERRIDE", config_path.to_str().unwrap());
+        }
+
+        let result = load_local_config();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("parse"));
+
+        unsafe {
+            env::remove_var("AGENT_SECRET_FILE_OVERRIDE");
+        }
+    }
 }
