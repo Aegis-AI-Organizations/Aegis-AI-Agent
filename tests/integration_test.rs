@@ -128,8 +128,12 @@ async fn test_run_failure() {
 async fn test_agent_init() {
     unsafe {
         env::set_var("SKIP_AGENT_INIT", "1");
+        env::set_var("SKIP_AGENT_LOOPS", "1");
     }
     aegis_ai_agent::agent::init_agent().await.unwrap();
+    unsafe {
+        env::remove_var("SKIP_AGENT_LOOPS");
+    }
 }
 
 #[tokio::test]
@@ -141,6 +145,7 @@ async fn test_binary_startup() {
     let binary_path = env!("CARGO_BIN_EXE_aegis-ai-agent");
     let child = Command::new(binary_path)
         .env("SKIP_AGENT_INIT", "1")
+        .env("SKIP_AGENT_LOOPS", "1")
         .stdout(Stdio::piped())
         .spawn();
 
@@ -150,4 +155,37 @@ async fn test_binary_startup() {
         child.kill().ok();
         child.wait().ok();
     }
+}
+
+#[tokio::test]
+async fn test_upload_payload_retries() {
+    unsafe {
+        std::env::set_var("AGENT_ALLOW_HTTP", "true");
+    }
+    let mut server = mockito::Server::new_async().await;
+    let url = server.url();
+    let client = aegis_ai_agent::client::AegisClient::new(url.clone());
+
+    // Mock failure then success
+    let _m1 = server
+        .mock("PUT", "/upload")
+        .with_status(500)
+        .expect(1)
+        .create_async()
+        .await;
+
+    let _m2 = server
+        .mock("PUT", "/upload")
+        .with_status(200)
+        .expect(1)
+        .create_async()
+        .await;
+
+    let upload_url = format!("{}/upload", url);
+    let data = vec![1, 2, 3];
+
+    // This should retry and eventually succeed
+    // Note: It might take a few seconds due to backoff
+    let result = client.upload_payload(&upload_url, data).await;
+    assert!(result.is_ok());
 }

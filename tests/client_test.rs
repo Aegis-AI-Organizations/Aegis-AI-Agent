@@ -20,7 +20,10 @@ async fn test_register_success() {
 
     let client = AegisClient::new(url);
     let config = client
-        .register("token", "agent-01".to_string())
+        .register(
+            "ag_0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefg",
+            "agent-01".to_string(),
+        )
         .await
         .unwrap();
 
@@ -44,7 +47,12 @@ async fn test_register_failure() {
         .await;
 
     let client = AegisClient::new(url);
-    let result = client.register("token", "agent-01".to_string()).await;
+    let result = client
+        .register(
+            "ag_0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefg",
+            "agent-01".to_string(),
+        )
+        .await;
 
     assert!(result.is_err());
     assert!(result.unwrap_err().to_string().contains("401"));
