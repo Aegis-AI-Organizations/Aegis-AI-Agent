@@ -30,7 +30,12 @@ async fn main() -> anyhow::Result<()> {
         let host = extractor.get_host_info().await?;
         let processes = extractor.get_processes().await?;
         Ok::<aegis_ai_agent::domain::TopologyPayload, anyhow::Error>(
-            aegis_ai_agent::domain::TopologyPayload { host, processes },
+            aegis_ai_agent::domain::TopologyPayload {
+                host,
+                processes,
+                containers: None,
+                pods: None,
+            },
         )
     }
     .await;
