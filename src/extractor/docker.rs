@@ -44,15 +44,17 @@ impl SystemExtractor for DockerExtractor {
 
         let mut nodes = Vec::new();
         for c in containers {
-            let id = c.id.unwrap_or_else(|| "unknown".to_string());
-            let name = c
+            let id = c.id.clone().unwrap_or_else(|| "unknown".to_string());
+            let raw_name = c
                 .names
-                .unwrap_or_default()
-                .first()
+                .as_ref()
+                .and_then(|n| n.first())
                 .cloned()
                 .unwrap_or_else(|| id.clone());
-            let image = c.image.unwrap_or_else(|| "unknown".to_string());
-            let state = c.state.unwrap_or_else(|| "unknown".to_string());
+
+            let name = normalize_container_name(&raw_name);
+            let image = c.image.clone().unwrap_or_else(|| "unknown".to_string());
+            let state = c.state.clone().unwrap_or_else(|| "unknown".to_string());
 
             let mut env = BTreeMap::new();
 
@@ -64,7 +66,13 @@ impl SystemExtractor for DockerExtractor {
                             for e in envs {
                                 let parts: Vec<&str> = e.splitn(2, '=').collect();
                                 if parts.len() == 2 {
-                                    env.insert(parts[0].to_string(), parts[1].to_string());
+                                    let key = parts[0].to_string();
+                                    let val = if is_sensitive_key(&key) {
+                                        "<redacted>".to_string()
+                                    } else {
+                                        parts[1].to_string()
+                                    };
+                                    env.insert(key, val);
                                 }
                             }
                         }
@@ -94,5 +102,38 @@ impl SystemExtractor for DockerExtractor {
         }
 
         Ok(nodes)
+    }
+}
+
+fn normalize_container_name(name: &str) -> String {
+    name.strip_prefix('/').unwrap_or(name).to_string()
+}
+
+fn is_sensitive_key(key: &str) -> bool {
+    let k = key.to_uppercase();
+    k.contains("PASSWORD")
+        || k.contains("SECRET")
+        || k.contains("TOKEN")
+        || k.contains("KEY")
+        || k.contains("AUTH")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_normalize_container_name() {
+        assert_eq!(normalize_container_name("/redis"), "redis");
+        assert_eq!(normalize_container_name("mysql"), "mysql");
+    }
+
+    #[test]
+    fn test_is_sensitive_key() {
+        assert!(is_sensitive_key("DB_PASSWORD"));
+        assert!(is_sensitive_key("API_TOKEN"));
+        assert!(is_sensitive_key("APP_SECRET"));
+        assert!(!is_sensitive_key("APP_NAME"));
+        assert!(!is_sensitive_key("DB_HOST"));
     }
 }
