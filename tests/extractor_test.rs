@@ -1,7 +1,11 @@
-use aegis_ai_agent::extractor::{docker, k8s, ContainerNode, SysinfoExtractor, SystemExtractor};
+use aegis_ai_agent::extractor::{
+    docker, k8s, ContainerNode, SysinfoExtractor, SystemExtractor, TopologyExtractor,
+};
 use k8s_openapi::api::core::v1::{Container, Pod, PodSpec, PodStatus};
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use std::collections::{BTreeMap, HashMap};
+
+fn assert_topology_extractor<T: TopologyExtractor>() {}
 
 #[tokio::test]
 async fn test_sysinfo_extractor_real_data() {
@@ -36,6 +40,12 @@ async fn test_sysinfo_extractor_real_data() {
         "Current PID {} not found in process list",
         current_pid
     );
+}
+
+#[test]
+fn test_runtime_extractors_implement_topology_extractor() {
+    assert_topology_extractor::<docker::DockerExtractor>();
+    assert_topology_extractor::<k8s::K8sExtractor>();
 }
 
 #[test]
@@ -186,4 +196,41 @@ fn test_map_pod_to_node_enrichment() {
     let node = k8s::map_pod_to_node(pod);
     assert_eq!(node.containers[0].id, "docker://id123");
     assert!(node.containers[0].state.contains("running"));
+}
+
+#[test]
+fn test_is_active_pod_filters_completed_pods() {
+    let running = Pod {
+        status: Some(PodStatus {
+            phase: Some("Running".to_string()),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let pending = Pod {
+        status: Some(PodStatus {
+            phase: Some("Pending".to_string()),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let succeeded = Pod {
+        status: Some(PodStatus {
+            phase: Some("Succeeded".to_string()),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let failed = Pod {
+        status: Some(PodStatus {
+            phase: Some("Failed".to_string()),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+
+    assert!(k8s::is_active_pod(&running));
+    assert!(k8s::is_active_pod(&pending));
+    assert!(!k8s::is_active_pod(&succeeded));
+    assert!(!k8s::is_active_pod(&failed));
 }

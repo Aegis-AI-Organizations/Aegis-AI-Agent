@@ -3,7 +3,10 @@ pub mod docker;
 #[cfg(feature = "k8s")]
 pub mod k8s;
 
-pub use crate::domain::{ContainerNode, HostNode, PodNode, ProcessNode, SystemExtractor};
+pub use crate::domain::{
+    ActiveResource, ContainerNode, HostNode, PodNode, ProcessNode, SystemExtractor,
+    TopologyExtractor,
+};
 #[cfg(feature = "docker")]
 pub use docker::DockerExtractor;
 #[cfg(feature = "k8s")]
