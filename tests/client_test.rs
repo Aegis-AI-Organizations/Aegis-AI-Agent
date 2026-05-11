@@ -4,7 +4,9 @@ use mockito;
 
 #[tokio::test]
 async fn test_register_success() {
-    unsafe { std::env::set_var("AGENT_ALLOW_HTTP", "true"); }
+    unsafe {
+        std::env::set_var("AGENT_ALLOW_HTTP", "true");
+    }
     let mut server = mockito::Server::new_async().await;
     let url = server.url();
 
@@ -28,7 +30,9 @@ async fn test_register_success() {
 
 #[tokio::test]
 async fn test_register_failure() {
-    unsafe { std::env::set_var("AGENT_ALLOW_HTTP", "true"); }
+    unsafe {
+        std::env::set_var("AGENT_ALLOW_HTTP", "true");
+    }
     let mut server = mockito::Server::new_async().await;
     let url = server.url();
 
@@ -48,7 +52,9 @@ async fn test_register_failure() {
 
 #[tokio::test]
 async fn test_heartbeat_success() {
-    unsafe { std::env::set_var("AGENT_ALLOW_HTTP", "true"); }
+    unsafe {
+        std::env::set_var("AGENT_ALLOW_HTTP", "true");
+    }
     let mut server = mockito::Server::new_async().await;
     let url = server.url();
 
@@ -70,7 +76,9 @@ async fn test_heartbeat_success() {
 
 #[tokio::test]
 async fn test_get_upload_url_success() {
-    unsafe { std::env::set_var("AGENT_ALLOW_HTTP", "true"); }
+    unsafe {
+        std::env::set_var("AGENT_ALLOW_HTTP", "true");
+    }
     let mut server = mockito::Server::new_async().await;
     let url = server.url();
 
@@ -95,7 +103,9 @@ async fn test_get_upload_url_success() {
 
 #[tokio::test]
 async fn test_upload_payload_immediate_success() {
-    unsafe { std::env::set_var("AGENT_ALLOW_HTTP", "true"); }
+    unsafe {
+        std::env::set_var("AGENT_ALLOW_HTTP", "true");
+    }
     let mut server = mockito::Server::new_async().await;
     let url = server.url();
     let upload_path = "/upload";

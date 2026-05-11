@@ -49,16 +49,19 @@ impl SystemExtractor for DockerExtractor {
 
         // Second pass: enrich with detailed info if possible
         for node in &mut nodes {
-             if let Ok(inspect) = self.docker.inspect_container(&node.id, None).await {
-                 enrich_node_with_inspect(node, inspect);
-             }
+            if let Ok(inspect) = self.docker.inspect_container(&node.id, None).await {
+                enrich_node_with_inspect(node, inspect);
+            }
         }
 
         Ok(nodes)
     }
 }
 
-pub fn map_container_to_node(c: bollard::models::ContainerSummary, inspect: Option<bollard::models::ContainerInspectResponse>) -> ContainerNode {
+pub fn map_container_to_node(
+    c: bollard::models::ContainerSummary,
+    inspect: Option<bollard::models::ContainerInspectResponse>,
+) -> ContainerNode {
     let id = c.id.unwrap_or_else(|| "unknown".to_string());
     let raw_name = c
         .names
@@ -93,7 +96,10 @@ pub fn map_container_to_node(c: bollard::models::ContainerSummary, inspect: Opti
     node
 }
 
-pub fn enrich_node_with_inspect(node: &mut ContainerNode, inspect: bollard::models::ContainerInspectResponse) {
+pub fn enrich_node_with_inspect(
+    node: &mut ContainerNode,
+    inspect: bollard::models::ContainerInspectResponse,
+) {
     if let Some(config) = inspect.config {
         if let Some(envs) = config.env {
             for e in envs {
@@ -124,4 +130,3 @@ pub fn is_sensitive_key(key: &str) -> bool {
         || k.contains("KEY")
         || k.contains("AUTH")
 }
-

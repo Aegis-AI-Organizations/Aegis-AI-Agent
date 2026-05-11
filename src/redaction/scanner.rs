@@ -8,12 +8,21 @@ impl SecretScanner {
     pub fn new() -> Self {
         let patterns = vec![
             // AWS Keys
-            (Regex::new(r"AKIA[0-9A-Z]{16}").unwrap(), "<REDACTED_AWS_KEY>"),
+            (
+                Regex::new(r"AKIA[0-9A-Z]{16}").unwrap(),
+                "<REDACTED_AWS_KEY>",
+            ),
             // Generic high entropy string (e.g. JWT, passwords)
             // Simplified for now, real implementation would use Shannon entropy
-            (Regex::new(r"[a-zA-Z0-9+/]{40,}={0,2}").unwrap(), "<REDACTED_SECRET>"),
+            (
+                Regex::new(r"[a-zA-Z0-9+/]{40,}={0,2}").unwrap(),
+                "<REDACTED_SECRET>",
+            ),
             // IPv4 (Not a secret but often requested to be redacted)
-            (Regex::new(r"\b(?:\d{1,3}\.){3}\d{1,3}\b").unwrap(), "<REDACTED_IP>"),
+            (
+                Regex::new(r"\b(?:\d{1,3}\.){3}\d{1,3}\b").unwrap(),
+                "<REDACTED_IP>",
+            ),
         ];
 
         Self { patterns }

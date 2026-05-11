@@ -19,7 +19,7 @@ fn test_redactor_no_nlp_fallback() {
     let redactor = Redactor::new();
     let input = "Hello John Doe, your key is AKIA1234567890ABCDEF";
     let redacted = redactor.redact(input);
-    
+
     assert!(redacted.contains("<REDACTED_AWS_KEY>"));
     // John Doe might not be redacted if NLP is missing, but the function should not crash
     assert!(redacted.contains("John Doe") || redacted.contains("<REDACTED_PERSON>"));

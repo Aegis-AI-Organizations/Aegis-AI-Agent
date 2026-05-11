@@ -1,7 +1,7 @@
-use tract_onnx::prelude::*;
-use tokenizers::Tokenizer;
 use ndarray::Array2;
-use tracing::{error, info, warn};
+use tokenizers::Tokenizer;
+use tracing::{info, warn};
+use tract_onnx::prelude::*;
 
 pub struct NlpEngine {
     model: RunnableModel<TypedFact, Box<dyn TypedOp>, Graph<TypedFact, Box<dyn TypedOp>>>,
@@ -10,11 +10,19 @@ pub struct NlpEngine {
 
 impl NlpEngine {
     pub fn new() -> anyhow::Result<Self> {
-        let model_path = std::env::var("AEGIS_MODEL_PATH").unwrap_or_else(|_| "models/model.onnx".to_string());
-        let tokenizer_path = std::env::var("AEGIS_TOKENIZER_PATH").unwrap_or_else(|_| "models/tokenizer.json".to_string());
+        let model_path =
+            std::env::var("AEGIS_MODEL_PATH").unwrap_or_else(|_| "models/model.onnx".to_string());
+        let tokenizer_path = std::env::var("AEGIS_TOKENIZER_PATH")
+            .unwrap_or_else(|_| "models/tokenizer.json".to_string());
 
-        if !std::path::Path::new(&model_path).exists() || !std::path::Path::new(&tokenizer_path).exists() {
-            anyhow::bail!("NLP Model or Tokenizer not found at {} and {}", model_path, tokenizer_path);
+        if !std::path::Path::new(&model_path).exists()
+            || !std::path::Path::new(&tokenizer_path).exists()
+        {
+            anyhow::bail!(
+                "NLP Model or Tokenizer not found at {} and {}",
+                model_path,
+                tokenizer_path
+            );
         }
 
         info!("Loading NLP model from {}...", model_path);
@@ -41,23 +49,25 @@ impl NlpEngine {
     }
 
     fn process(&self, input: &str) -> anyhow::Result<String> {
-        let encoding = self.tokenizer.encode(input, true)
+        let encoding = self
+            .tokenizer
+            .encode(input, true)
             .map_err(|e| anyhow::anyhow!("Tokenization failed: {}", e))?;
-        
+
         let ids = encoding.get_ids();
-        let input_ids = Array2::from_shape_vec((1, ids.len()), ids.iter().map(|&x| x as i64).collect())?;
-        
+        let input_ids =
+            Array2::from_shape_vec((1, ids.len()), ids.iter().map(|&x| x as i64).collect())?;
+
         // Tract expects Tensors
         let tensor = tract_ndarray::Array::from(input_ids).into_tensor();
-        
+
         let result = self.model.run(tvec!(tensor.into()))?;
         let logits = result[0].to_array_view::<f32>()?;
 
         // Simplified post-processing: map B-PER, I-PER etc to <REDACTED_PERSON>
         // In a real DistilBERT-NER model:
         // 0: O, 1: B-PER, 2: I-PER, 3: B-ORG, 4: I-ORG, 5: B-LOC, 6: I-LOC, 7: B-MISC, 8: I-MISC
-        
-        let mut tokens = encoding.get_tokens().to_vec();
+
         let mut redacted_indices = Vec::new();
 
         for i in 0..logits.shape()[1] {
@@ -80,12 +90,8 @@ impl NlpEngine {
         }
 
         // Reconstruct string (very simplified)
-        let mut final_text = input.to_string();
-        // Sorting reversed to avoid index shift issues if we were replacing in-place by index
-        // But here we'll just use a simpler approach for the demonstration
-        
         if redacted_indices.is_empty() {
-            return Ok(final_text);
+            return Ok(input.to_string());
         }
 
         // In a real implementation, we would use the offsets from the tokenizer
@@ -97,7 +103,9 @@ impl NlpEngine {
 
         for (i, label) in redacted_indices {
             let (start, end) = offsets[i];
-            if start == 0 && end == 0 { continue; } // Skip special tokens
+            if start == 0 && end == 0 {
+                continue;
+            } // Skip special tokens
 
             if let Some(prev_label) = current_redaction {
                 if prev_label == label {

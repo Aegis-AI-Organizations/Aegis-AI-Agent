@@ -1,4 +1,4 @@
-use aegis_ai_agent::extractor::{docker, k8s, SysinfoExtractor, SystemExtractor, ContainerNode};
+use aegis_ai_agent::extractor::{docker, k8s, ContainerNode, SysinfoExtractor, SystemExtractor};
 use k8s_openapi::api::core::v1::{Container, Pod, PodSpec, PodStatus};
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use std::collections::{BTreeMap, HashMap};

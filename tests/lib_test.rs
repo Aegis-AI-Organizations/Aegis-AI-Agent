@@ -1,4 +1,4 @@
-use aegis_ai_agent::{startup_banner, prepare_run};
+use aegis_ai_agent::{prepare_run, startup_banner};
 use serial_test::serial;
 
 #[test]
