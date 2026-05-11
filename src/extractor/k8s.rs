@@ -1,6 +1,6 @@
 use crate::domain::{ContainerNode, HostNode, PodNode, ProcessNode, SystemExtractor};
 use k8s_openapi::api::core::v1::Pod;
-use kube::{Api, Client, api::ListParams};
+use kube::{api::ListParams, Api, Client};
 use std::collections::BTreeMap;
 
 /// SystemExtractor implementation using the `kube-rs` crate to query Kubernetes API.
@@ -40,7 +40,7 @@ impl SystemExtractor for K8sExtractor {
             let status = p.status.as_ref();
 
             let mut containers = Vec::new();
-            
+
             // Extract containers from spec
             if let Some(s) = spec {
                 for c in &s.containers {

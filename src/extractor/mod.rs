@@ -1,9 +1,9 @@
 pub mod docker;
 pub mod k8s;
 
+pub use crate::domain::{ContainerNode, HostNode, PodNode, ProcessNode, SystemExtractor};
 pub use docker::DockerExtractor;
 pub use k8s::K8sExtractor;
-pub use crate::domain::{ContainerNode, HostNode, PodNode, ProcessNode, SystemExtractor};
 use std::sync::{Arc, Mutex};
 use sysinfo::{ProcessesToUpdate, System};
 

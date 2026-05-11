@@ -32,7 +32,7 @@ async fn main() -> anyhow::Result<()> {
     let topology_result = async {
         let host = sys_extractor.get_host_info().await?;
         let processes = sys_extractor.get_processes().await?;
-        
+
         // Detect if we are in Kubernetes
         let mut pods = None;
         if std::env::var("KUBERNETES_SERVICE_HOST").is_ok() {
@@ -42,7 +42,7 @@ async fn main() -> anyhow::Result<()> {
                     Ok(p) => {
                         info!("Successfully discovered {} pods in cluster", p.len());
                         pods = Some(p);
-                    },
+                    }
                     Err(e) => error!("Failed to extract Kubernetes pods: {:?}", e),
                 }
             } else {
@@ -59,18 +59,21 @@ async fn main() -> anyhow::Result<()> {
                         info!("Successfully discovered {} Docker containers", c.len());
                         containers = Some(c);
                     }
-                },
-                Err(e) => info!("Docker extraction skipped or failed (daemon might not be reachable): {}", e),
+                }
+                Err(e) => info!(
+                    "Docker extraction skipped or failed (daemon might not be reachable): {}",
+                    e
+                ),
             }
         }
 
         Ok::<aegis_ai_agent::domain::TopologyPayload, anyhow::Error>(
-            aegis_ai_agent::domain::TopologyPayload { 
-                host, 
-                processes, 
-                containers, 
-                pods 
-            }
+            aegis_ai_agent::domain::TopologyPayload {
+                host,
+                processes,
+                containers,
+                pods,
+            },
         )
     }
     .await;
