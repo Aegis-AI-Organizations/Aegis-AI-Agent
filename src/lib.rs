@@ -5,6 +5,7 @@ pub mod domain;
 pub mod error;
 pub mod extractor;
 pub mod health;
+pub mod redaction;
 pub mod server;
 
 use std::net::SocketAddr;
@@ -33,28 +34,4 @@ pub async fn prepare_run() -> anyhow::Result<SocketAddr> {
 pub async fn run() -> anyhow::Result<()> {
     let addr = prepare_run().await?;
     server::start_server(addr).await
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use serial_test::serial;
-
-    #[test]
-    fn test_startup_banner() {
-        assert_eq!(startup_banner(), "Aegis AI Agent is starting...");
-    }
-
-    #[tokio::test]
-    #[serial]
-    async fn test_prepare_run_skip_init() {
-        unsafe {
-            std::env::set_var("SKIP_AGENT_INIT", "1");
-        }
-        let _ = prepare_run().await;
-
-        unsafe {
-            std::env::remove_var("SKIP_AGENT_INIT");
-        }
-    }
 }

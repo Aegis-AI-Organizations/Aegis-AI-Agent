@@ -49,16 +49,19 @@ impl SystemExtractor for DockerExtractor {
 
         // Second pass: enrich with detailed info if possible
         for node in &mut nodes {
-             if let Ok(inspect) = self.docker.inspect_container(&node.id, None).await {
-                 enrich_node_with_inspect(node, inspect);
-             }
+            if let Ok(inspect) = self.docker.inspect_container(&node.id, None).await {
+                enrich_node_with_inspect(node, inspect);
+            }
         }
 
         Ok(nodes)
     }
 }
 
-fn map_container_to_node(c: bollard::models::ContainerSummary, inspect: Option<bollard::models::ContainerInspectResponse>) -> ContainerNode {
+pub fn map_container_to_node(
+    c: bollard::models::ContainerSummary,
+    inspect: Option<bollard::models::ContainerInspectResponse>,
+) -> ContainerNode {
     let id = c.id.unwrap_or_else(|| "unknown".to_string());
     let raw_name = c
         .names
@@ -93,7 +96,10 @@ fn map_container_to_node(c: bollard::models::ContainerSummary, inspect: Option<b
     node
 }
 
-fn enrich_node_with_inspect(node: &mut ContainerNode, inspect: bollard::models::ContainerInspectResponse) {
+pub fn enrich_node_with_inspect(
+    node: &mut ContainerNode,
+    inspect: bollard::models::ContainerInspectResponse,
+) {
     if let Some(config) = inspect.config {
         if let Some(envs) = config.env {
             for e in envs {
@@ -112,80 +118,15 @@ fn enrich_node_with_inspect(node: &mut ContainerNode, inspect: bollard::models::
     }
 }
 
-fn normalize_container_name(name: &str) -> String {
+pub fn normalize_container_name(name: &str) -> String {
     name.strip_prefix('/').unwrap_or(name).to_string()
 }
 
-fn is_sensitive_key(key: &str) -> bool {
+pub fn is_sensitive_key(key: &str) -> bool {
     let k = key.to_uppercase();
     k.contains("PASS")
         || k.contains("SECRET")
         || k.contains("TOKEN")
         || k.contains("KEY")
         || k.contains("AUTH")
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_normalize_container_name() {
-        assert_eq!(normalize_container_name("/redis"), "redis");
-        assert_eq!(normalize_container_name("mysql"), "mysql");
-    }
-
-    #[test]
-    fn test_is_sensitive_key() {
-        assert!(is_sensitive_key("DB_PASSWORD"));
-        assert!(is_sensitive_key("API_TOKEN"));
-        assert!(is_sensitive_key("APP_SECRET"));
-        assert!(!is_sensitive_key("APP_NAME"));
-        assert!(!is_sensitive_key("DB_HOST"));
-    }
-
-    #[test]
-    fn test_map_container_to_node_basic() {
-        let summary = bollard::models::ContainerSummary {
-            id: Some("1234567890abcdef".to_string()),
-            names: Some(vec!["/test-container".to_string()]),
-            image: Some("nginx:latest".to_string()),
-            state: Some("running".to_string()),
-            labels: Some(std::collections::HashMap::from([("version".to_string(), "1.0".to_string())])),
-            ..Default::default()
-        };
-
-        let node = map_container_to_node(summary, None);
-        assert_eq!(node.id, "1234567890abcdef");
-        assert_eq!(node.name, "test-container");
-        assert_eq!(node.image, "nginx:latest");
-        assert_eq!(node.state, "running");
-        assert_eq!(node.env.get("label:version").unwrap(), "1.0");
-    }
-
-    #[test]
-    fn test_enrich_node_with_inspect() {
-        let mut node = ContainerNode {
-            id: "123".to_string(),
-            name: "test".to_string(),
-            image: "img".to_string(),
-            state: "stat".to_string(),
-            env: BTreeMap::new(),
-        };
-
-        let inspect = bollard::models::ContainerInspectResponse {
-            config: Some(bollard::models::ContainerConfig {
-                env: Some(vec![
-                    "DB_USER=admin".to_string(),
-                    "DB_PASS=secret123".to_string(),
-                ]),
-                ..Default::default()
-            }),
-            ..Default::default()
-        };
-
-        enrich_node_with_inspect(&mut node, inspect);
-        assert_eq!(node.env.get("DB_USER").unwrap(), "admin");
-        assert_eq!(node.env.get("DB_PASS").unwrap(), "<redacted>");
-    }
 }
