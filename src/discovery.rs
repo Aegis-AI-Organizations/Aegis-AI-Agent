@@ -45,7 +45,7 @@ pub async fn start_discovery_loop(config: AgentConfig) -> Result<()> {
     }
 }
 
-async fn collect_topology(sys_extractor: &SysinfoExtractor) -> Result<TopologyPayload> {
+pub async fn collect_topology(sys_extractor: &SysinfoExtractor) -> Result<TopologyPayload> {
     let host = sys_extractor.get_host_info().await?;
     let processes = sys_extractor.get_processes().await?;
 
@@ -71,7 +71,7 @@ async fn collect_topology(sys_extractor: &SysinfoExtractor) -> Result<TopologyPa
     })
 }
 
-fn redact_payload(payload: &mut TopologyPayload, redactor: &Redactor) {
+pub fn redact_payload(payload: &mut TopologyPayload, redactor: &Redactor) {
     // Redact host info
     payload.host.hostname = redactor.redact(&payload.host.hostname);
 
