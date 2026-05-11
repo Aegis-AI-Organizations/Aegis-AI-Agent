@@ -3,8 +3,10 @@ use tokenizers::Tokenizer;
 use tracing::{info, warn};
 use tract_onnx::prelude::*;
 
+type TractModel = RunnableModel<TypedFact, Box<dyn TypedOp>, Graph<TypedFact, Box<dyn TypedOp>>>;
+
 pub struct NlpEngine {
-    model: RunnableModel<TypedFact, Box<dyn TypedOp>, Graph<TypedFact, Box<dyn TypedOp>>>,
+    model: TractModel,
     tokenizer: Tokenizer,
 }
 
