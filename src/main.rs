@@ -5,10 +5,7 @@ use tracing_subscriber::{EnvFilter, FmtSubscriber};
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Load .env variables implicitly if present
-    match dotenvy::dotenv() {
-        Ok(path) => info!("Loaded environment from {:?}", path),
-        Err(_) => info!("No .env file found, using system environment variables"),
-    }
+    let dotenv_result = dotenvy::dotenv();
 
     // Setup tracing logs with RUST_LOG environment variable (default to info)
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
@@ -24,6 +21,12 @@ async fn main() -> anyhow::Result<()> {
     tracing::subscriber::set_global_default(subscriber)
         .expect("Setting default tracing subscriber failed");
 
+    // Now we can use info!/error!
+    match dotenv_result {
+        Ok(path) => info!("Loaded environment from {:?}", path),
+        Err(_) => info!("No .env file found, using system environment variables"),
+    }
+
     info!("Initializing Aegis AI Agent...");
 
     // Initial system extraction for diagnostic/initialization purposes
@@ -37,34 +40,61 @@ async fn main() -> anyhow::Result<()> {
         let mut pods = None;
         if std::env::var("KUBERNETES_SERVICE_HOST").is_ok() {
             info!("Kubernetes detected, initializing K8s extractor...");
-            if let Ok(k8s_extractor) = aegis_ai_agent::extractor::K8sExtractor::new().await {
-                match k8s_extractor.get_pods().await {
-                    Ok(p) => {
-                        info!("Successfully discovered {} pods in cluster", p.len());
-                        pods = Some(p);
+            let k8s_extraction = async {
+                if let Ok(k8s_extractor) = aegis_ai_agent::extractor::K8sExtractor::new().await {
+                    match k8s_extractor.get_pods().await {
+                        Ok(p) => {
+                            info!("Successfully discovered {} pods in cluster", p.len());
+                            Some(p)
+                        }
+                        Err(e) => {
+                            error!("Failed to extract Kubernetes pods: {:?}", e);
+                            None
+                        }
                     }
-                    Err(e) => error!("Failed to extract Kubernetes pods: {:?}", e),
+                } else {
+                    error!("Failed to initialize K8s client (check ServiceAccount/RBAC)");
+                    None
                 }
-            } else {
-                error!("Failed to initialize K8s client (check ServiceAccount/RBAC)");
-            }
+            };
+
+            pods = tokio::time::timeout(std::time::Duration::from_secs(5), k8s_extraction)
+                .await
+                .unwrap_or_else(|_| {
+                    error!("Kubernetes extraction timed out after 5s");
+                    None
+                });
         }
 
         // Try to detect Docker containers
         let mut containers = None;
         if let Ok(docker_extractor) = aegis_ai_agent::extractor::DockerExtractor::new() {
-            match docker_extractor.get_containers().await {
-                Ok(c) => {
-                    if !c.is_empty() {
-                        info!("Successfully discovered {} Docker containers", c.len());
-                        containers = Some(c);
+            let docker_extraction = async {
+                match docker_extractor.get_containers().await {
+                    Ok(c) => {
+                        if !c.is_empty() {
+                            info!("Successfully discovered {} Docker containers", c.len());
+                            Some(c)
+                        } else {
+                            None
+                        }
+                    }
+                    Err(e) => {
+                        info!(
+                            "Docker extraction skipped or failed (daemon might not be reachable): {}",
+                            e
+                        );
+                        None
                     }
                 }
-                Err(e) => info!(
-                    "Docker extraction skipped or failed (daemon might not be reachable): {}",
-                    e
-                ),
-            }
+            };
+
+            containers = tokio::time::timeout(std::time::Duration::from_secs(5), docker_extraction)
+                .await
+                .unwrap_or_else(|_| {
+                    info!("Docker extraction timed out after 5s");
+                    None
+                });
         }
 
         Ok::<aegis_ai_agent::domain::TopologyPayload, anyhow::Error>(
