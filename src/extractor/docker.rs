@@ -36,18 +36,26 @@ impl SystemExtractor for DockerExtractor {
             ..Default::default()
         });
 
-        let containers = self.docker.list_containers(options).await
+        let containers = self
+            .docker
+            .list_containers(options)
+            .await
             .map_err(|e| anyhow::anyhow!("Failed to list Docker containers: {}", e))?;
 
         let mut nodes = Vec::new();
         for c in containers {
             let id = c.id.unwrap_or_else(|| "unknown".to_string());
-            let name = c.names.unwrap_or_default().first().cloned().unwrap_or_else(|| id.clone());
+            let name = c
+                .names
+                .unwrap_or_default()
+                .first()
+                .cloned()
+                .unwrap_or_else(|| id.clone());
             let image = c.image.unwrap_or_else(|| "unknown".to_string());
             let state = c.state.unwrap_or_else(|| "unknown".to_string());
 
             let mut env = BTreeMap::new();
-            
+
             // Detailed inspection to get real environment variables
             match self.docker.inspect_container(&id, None).await {
                 Ok(inspect) => {
@@ -61,9 +69,13 @@ impl SystemExtractor for DockerExtractor {
                             }
                         }
                     }
-                },
+                }
                 Err(e) => {
-                    tracing::warn!("Failed to inspect container {}: {}. Falling back to labels.", id, e);
+                    tracing::warn!(
+                        "Failed to inspect container {}: {}. Falling back to labels.",
+                        id,
+                        e
+                    );
                     if let Some(labels) = c.labels {
                         for (k, v) in labels {
                             env.insert(format!("label:{}", k), v);
