@@ -46,11 +46,29 @@ impl SystemExtractor for DockerExtractor {
             let image = c.image.unwrap_or_else(|| "unknown".to_string());
             let state = c.state.unwrap_or_else(|| "unknown".to_string());
 
-            // Extract labels as environment/metadata for now
             let mut env = BTreeMap::new();
-            if let Some(labels) = c.labels {
-                for (k, v) in labels {
-                    env.insert(k, v);
+            
+            // Detailed inspection to get real environment variables
+            match self.docker.inspect_container(&id, None).await {
+                Ok(inspect) => {
+                    if let Some(config) = inspect.config {
+                        if let Some(envs) = config.env {
+                            for e in envs {
+                                let parts: Vec<&str> = e.splitn(2, '=').collect();
+                                if parts.len() == 2 {
+                                    env.insert(parts[0].to_string(), parts[1].to_string());
+                                }
+                            }
+                        }
+                    }
+                },
+                Err(e) => {
+                    tracing::warn!("Failed to inspect container {}: {}. Falling back to labels.", id, e);
+                    if let Some(labels) = c.labels {
+                        for (k, v) in labels {
+                            env.insert(format!("label:{}", k), v);
+                        }
+                    }
                 }
             }
 
