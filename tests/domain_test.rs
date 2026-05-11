@@ -32,3 +32,56 @@ fn test_process_node_serialization() {
     let decoded: ProcessNode = serde_json::from_str(&json).unwrap();
     assert_eq!(decoded.pid, 1234);
 }
+
+#[test]
+fn test_network_topology_payload_serialization() {
+    let payload = NetworkTopologyPayload {
+        hosts: vec![ProtoHost {
+            id: "host-1".to_string(),
+            hostname: "host-1".to_string(),
+            ip_addresses: vec!["127.0.0.1".to_string()],
+            containers: vec![ProtoContainer {
+                id: "container-1".to_string(),
+                name: "api".to_string(),
+                image: "api:latest".to_string(),
+                processes: Vec::new(),
+                ports: vec![ProtoPort {
+                    number: 8080,
+                    protocol: "tcp".to_string(),
+                    state: Some("LISTEN".to_string()),
+                }],
+            }],
+            processes: vec![ProtoProcess {
+                pid: 1234,
+                name: "agent".to_string(),
+                command_line: Some("--scan".to_string()),
+                user: Some("aegis".to_string()),
+            }],
+        }],
+    };
+
+    let json = serde_json::to_string(&payload).unwrap();
+    assert!(json.contains("ipAddresses"));
+    assert!(json.contains("commandLine"));
+    assert!(json.contains("LISTEN"));
+
+    let decoded: NetworkTopologyPayload = serde_json::from_str(&json).unwrap();
+    assert_eq!(decoded.hosts[0].containers[0].ports[0].number, 8080);
+}
+
+#[test]
+fn test_active_resource_serialization() {
+    let resource = ActiveResource::Container(ContainerNode {
+        id: "container-1".to_string(),
+        name: "api".to_string(),
+        image: "api:latest".to_string(),
+        state: "running".to_string(),
+        env: Default::default(),
+    });
+
+    let json = serde_json::to_string(&resource).unwrap();
+    assert!(json.contains("container"));
+
+    let decoded: ActiveResource = serde_json::from_str(&json).unwrap();
+    assert_eq!(decoded, resource);
+}
