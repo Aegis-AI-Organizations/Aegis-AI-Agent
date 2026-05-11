@@ -1,7 +1,7 @@
 use aegis_ai_agent::discovery::{collect_topology, redact_payload};
+use aegis_ai_agent::domain::{ContainerNode, HostNode, ProcessNode, TopologyPayload};
 use aegis_ai_agent::extractor::SysinfoExtractor;
 use aegis_ai_agent::redaction::Redactor;
-use aegis_ai_agent::domain::{ProcessNode, HostNode, TopologyPayload, ContainerNode};
 use std::collections::BTreeMap;
 
 #[tokio::test]
@@ -24,27 +24,26 @@ fn test_redact_payload() {
             uptime: 3600,
             total_ram: 16000,
         },
-        processes: vec![
-            ProcessNode {
-                pid: 1234,
-                name: "test-process".to_string(),
-                user: "root".to_string(),
-                args: Some(vec!["--password".to_string(), "super-secret-1234567890123456789012345678901234567890".to_string()]),
-            }
-        ],
-        containers: Some(vec![
-            ContainerNode {
-                id: "c1".to_string(),
-                name: "my-container".to_string(),
-                image: "nginx".to_string(),
-                state: "running".to_string(),
-                env: {
-                    let mut env = BTreeMap::new();
-                    env.insert("AWS_KEY".to_string(), "AKIA1234567890ABCDEF".to_string());
-                    env
-                },
-            }
-        ]),
+        processes: vec![ProcessNode {
+            pid: 1234,
+            name: "test-process".to_string(),
+            user: "root".to_string(),
+            args: Some(vec![
+                "--password".to_string(),
+                "super-secret-1234567890123456789012345678901234567890".to_string(),
+            ]),
+        }],
+        containers: Some(vec![ContainerNode {
+            id: "c1".to_string(),
+            name: "my-container".to_string(),
+            image: "nginx".to_string(),
+            state: "running".to_string(),
+            env: {
+                let mut env = BTreeMap::new();
+                env.insert("AWS_KEY".to_string(), "AKIA1234567890ABCDEF".to_string());
+                env
+            },
+        }]),
         pods: None,
     };
 
@@ -52,5 +51,9 @@ fn test_redact_payload() {
 
     assert_eq!(payload.host.hostname, "my-secret-host"); // Hostname is not PII by default in our regex
     assert!(payload.processes[0].args.as_ref().unwrap()[1].contains("<REDACTED_SECRET>"));
-    assert!(payload.containers.as_ref().unwrap()[0].env.get("AWS_KEY").unwrap().contains("<REDACTED_AWS_KEY>"));
+    assert!(payload.containers.as_ref().unwrap()[0]
+        .env
+        .get("AWS_KEY")
+        .unwrap()
+        .contains("<REDACTED_AWS_KEY>"));
 }

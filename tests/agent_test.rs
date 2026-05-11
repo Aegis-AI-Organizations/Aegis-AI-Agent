@@ -130,4 +130,3 @@ async fn test_init_agent_loads_local_config() {
         env::remove_var("SKIP_AGENT_LOOPS");
     }
 }
-
