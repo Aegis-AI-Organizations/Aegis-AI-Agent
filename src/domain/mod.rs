@@ -76,6 +76,8 @@ pub trait SystemExtractor: Send + Sync {
     async fn get_processes(&self) -> anyhow::Result<Vec<ProcessNode>>;
     /// Retrieves a list of pods in the cluster (if in K8s).
     async fn get_pods(&self) -> anyhow::Result<Vec<PodNode>>;
+    /// Retrieves a list of discovered containers (Docker).
+    async fn get_containers(&self) -> anyhow::Result<Vec<ContainerNode>>;
 }
 
 #[cfg(test)]

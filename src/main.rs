@@ -5,7 +5,10 @@ use tracing_subscriber::{EnvFilter, FmtSubscriber};
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Load .env variables implicitly if present
-    dotenvy::dotenv().ok();
+    match dotenvy::dotenv() {
+        Ok(path) => info!("Loaded environment from {:?}", path),
+        Err(_) => info!("No .env file found, using system environment variables"),
+    }
 
     // Setup tracing logs with RUST_LOG environment variable (default to info)
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
@@ -47,11 +50,25 @@ async fn main() -> anyhow::Result<()> {
             }
         }
 
+        // Try to detect Docker containers
+        let mut containers = None;
+        if let Ok(docker_extractor) = aegis_ai_agent::extractor::DockerExtractor::new() {
+            match docker_extractor.get_containers().await {
+                Ok(c) => {
+                    if !c.is_empty() {
+                        info!("Successfully discovered {} Docker containers", c.len());
+                        containers = Some(c);
+                    }
+                },
+                Err(e) => info!("Docker extraction skipped or failed (daemon might not be reachable): {}", e),
+            }
+        }
+
         Ok::<aegis_ai_agent::domain::TopologyPayload, anyhow::Error>(
             aegis_ai_agent::domain::TopologyPayload { 
                 host, 
                 processes, 
-                containers: None, 
+                containers, 
                 pods 
             }
         )

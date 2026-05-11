@@ -87,4 +87,9 @@ impl SystemExtractor for K8sExtractor {
 
         Ok(nodes)
     }
+
+    async fn get_containers(&self) -> anyhow::Result<Vec<ContainerNode>> {
+        // Pods already contain containers in K8sExtractor::get_pods
+        Ok(vec![])
+    }
 }
