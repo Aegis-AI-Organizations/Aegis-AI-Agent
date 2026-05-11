@@ -1,4 +1,7 @@
-use crate::domain::{HostNode, ProcessNode, SystemExtractor};
+pub mod k8s;
+
+pub use k8s::K8sExtractor;
+pub use crate::domain::{HostNode, PodNode, ProcessNode, SystemExtractor};
 use std::sync::{Arc, Mutex};
 use sysinfo::{ProcessesToUpdate, System};
 
@@ -71,6 +74,11 @@ impl SystemExtractor for SysinfoExtractor {
             Ok(processes)
         })
         .await?
+    }
+
+    async fn get_pods(&self) -> anyhow::Result<Vec<PodNode>> {
+        // Sysinfo doesn't know about Kubernetes pods
+        Ok(vec![])
     }
 }
 

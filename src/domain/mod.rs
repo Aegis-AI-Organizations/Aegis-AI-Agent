@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 /// Represents the host infrastructure of the client.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -30,7 +30,16 @@ pub struct ContainerNode {
     pub image: String,
     pub state: String,
     /// Environment variables (key-value pairs).
-    pub env: HashMap<String, String>,
+    pub env: BTreeMap<String, String>,
+}
+
+/// Represents a network connection between pods.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PodConnection {
+    pub target_pod: String,
+    pub target_namespace: String,
+    pub port: Option<u16>,
+    pub protocol: Option<String>,
 }
 
 /// Represents a Kubernetes Pod.
@@ -40,9 +49,11 @@ pub struct PodNode {
     pub namespace: String,
     pub ip: Option<String>,
     /// Kubernetes labels.
-    pub labels: HashMap<String, String>,
+    pub labels: BTreeMap<String, String>,
     /// List of containers within the pod.
     pub containers: Vec<ContainerNode>,
+    /// Network connections/relations discovered.
+    pub connections: Vec<PodConnection>,
 }
 
 /// Represents the complete system topology at a given time.
@@ -63,6 +74,8 @@ pub trait SystemExtractor: Send + Sync {
     async fn get_host_info(&self) -> anyhow::Result<HostNode>;
     /// Retrieves a list of currently running processes.
     async fn get_processes(&self) -> anyhow::Result<Vec<ProcessNode>>;
+    /// Retrieves a list of pods in the cluster (if in K8s).
+    async fn get_pods(&self) -> anyhow::Result<Vec<PodNode>>;
 }
 
 #[cfg(test)]
