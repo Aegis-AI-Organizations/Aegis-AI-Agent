@@ -49,6 +49,7 @@ pub async fn collect_topology(sys_extractor: &SysinfoExtractor) -> Result<Topolo
     let host = sys_extractor.get_host_info().await?;
     let processes = sys_extractor.get_processes().await?;
 
+    #[allow(unused_mut)]
     let mut pods = None;
     #[cfg(feature = "k8s")]
     if std::env::var("KUBERNETES_SERVICE_HOST").is_ok() {
@@ -57,6 +58,7 @@ pub async fn collect_topology(sys_extractor: &SysinfoExtractor) -> Result<Topolo
         }
     }
 
+    #[allow(unused_mut)]
     let mut containers = None;
     #[cfg(feature = "docker")]
     if let Ok(docker_extractor) = crate::extractor::DockerExtractor::new() {

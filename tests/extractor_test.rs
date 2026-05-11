@@ -1,10 +1,19 @@
-use aegis_ai_agent::extractor::{
-    docker, k8s, ContainerNode, SysinfoExtractor, SystemExtractor, TopologyExtractor,
-};
+#[cfg(any(feature = "docker", feature = "k8s"))]
+use aegis_ai_agent::extractor::{ContainerNode, TopologyExtractor};
+use aegis_ai_agent::extractor::{SysinfoExtractor, SystemExtractor};
+#[cfg(feature = "docker")]
+use aegis_ai_agent::extractor::docker;
+#[cfg(feature = "k8s")]
+use aegis_ai_agent::extractor::k8s;
+
+#[cfg(feature = "k8s")]
 use k8s_openapi::api::core::v1::{Container, Pod, PodSpec, PodStatus};
+#[cfg(feature = "k8s")]
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
+#[cfg(any(feature = "docker", feature = "k8s"))]
 use std::collections::{BTreeMap, HashMap};
 
+#[cfg(any(feature = "docker", feature = "k8s"))]
 fn assert_topology_extractor<T: TopologyExtractor>() {}
 
 #[tokio::test]
@@ -44,16 +53,20 @@ async fn test_sysinfo_extractor_real_data() {
 
 #[test]
 fn test_runtime_extractors_implement_topology_extractor() {
+    #[cfg(feature = "docker")]
     assert_topology_extractor::<docker::DockerExtractor>();
+    #[cfg(feature = "k8s")]
     assert_topology_extractor::<k8s::K8sExtractor>();
 }
 
+#[cfg(feature = "docker")]
 #[test]
 fn test_normalize_container_name() {
     assert_eq!(docker::normalize_container_name("/redis"), "redis");
     assert_eq!(docker::normalize_container_name("mysql"), "mysql");
 }
 
+#[cfg(feature = "docker")]
 #[test]
 fn test_is_sensitive_key() {
     assert!(docker::is_sensitive_key("DB_PASSWORD"));
@@ -63,6 +76,7 @@ fn test_is_sensitive_key() {
     assert!(!docker::is_sensitive_key("DB_HOST"));
 }
 
+#[cfg(feature = "docker")]
 #[test]
 fn test_map_container_to_node_basic() {
     let summary = bollard::models::ContainerSummary {
@@ -82,6 +96,7 @@ fn test_map_container_to_node_basic() {
     assert_eq!(node.env.get("label:version").unwrap(), "1.0");
 }
 
+#[cfg(feature = "docker")]
 #[test]
 fn test_enrich_node_with_inspect() {
     let mut node = ContainerNode {
@@ -108,6 +123,7 @@ fn test_enrich_node_with_inspect() {
     assert_eq!(node.env.get("DB_PASS").unwrap(), "<redacted>");
 }
 
+#[cfg(feature = "k8s")]
 #[test]
 fn test_map_pod_to_node_basic() {
     let pod = Pod {
@@ -140,6 +156,7 @@ fn test_map_pod_to_node_basic() {
     assert_eq!(node.containers[0].name, "test-container");
 }
 
+#[cfg(feature = "k8s")]
 #[test]
 fn test_map_pod_to_node_redaction() {
     let pod = Pod {
@@ -163,6 +180,7 @@ fn test_map_pod_to_node_redaction() {
     assert_eq!(env.get("SECRET_KEY").unwrap(), "<redacted>");
 }
 
+#[cfg(feature = "k8s")]
 #[test]
 fn test_map_pod_to_node_enrichment() {
     let pod = Pod {
@@ -198,6 +216,7 @@ fn test_map_pod_to_node_enrichment() {
     assert!(node.containers[0].state.contains("running"));
 }
 
+#[cfg(feature = "k8s")]
 #[test]
 fn test_is_active_pod_filters_completed_pods() {
     let running = Pod {

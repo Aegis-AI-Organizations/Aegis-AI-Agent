@@ -37,6 +37,7 @@ async fn main() -> anyhow::Result<()> {
         let processes = sys_extractor.get_processes().await?;
 
         // Detect if we are in Kubernetes
+        #[allow(unused_mut)]
         let mut pods = None;
         #[cfg(feature = "k8s")]
         if std::env::var("KUBERNETES_SERVICE_HOST").is_ok() {
@@ -68,6 +69,7 @@ async fn main() -> anyhow::Result<()> {
         }
 
         // Try to detect Docker containers
+        #[allow(unused_mut)]
         let mut containers = None;
         #[cfg(feature = "docker")]
         if let Ok(docker_extractor) = aegis_ai_agent::extractor::DockerExtractor::new() {
