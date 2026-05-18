@@ -1,4 +1,7 @@
-use crate::domain::{ContainerNode, HostNode, PodNode, ProcessNode, SystemExtractor};
+use crate::domain::{
+    ActiveResource, ContainerNode, HostNode, PodNode, ProcessNode, SystemExtractor,
+    TopologyExtractor,
+};
 use bollard::container::ListContainersOptions;
 use bollard::Docker;
 use std::collections::BTreeMap;
@@ -55,6 +58,26 @@ impl SystemExtractor for DockerExtractor {
         }
 
         Ok(nodes)
+    }
+}
+
+impl TopologyExtractor for DockerExtractor {
+    async fn list_active_resources(&self) -> anyhow::Result<Vec<ActiveResource>> {
+        let options = Some(ListContainersOptions::<String> {
+            all: false,
+            ..Default::default()
+        });
+
+        let containers = self
+            .docker
+            .list_containers(options)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to list active Docker containers: {}", e))?;
+
+        Ok(containers
+            .into_iter()
+            .map(|container| ActiveResource::Container(map_container_to_node(container, None)))
+            .collect())
     }
 }
 

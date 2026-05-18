@@ -60,6 +60,31 @@ docker run -d \
   ghcr.io/aegis-ai/aegis-agent:latest
 ```
 
+## 🔑 Gateway Registration & Heartbeat
+
+At startup, the agent loads `.agent_secret` if it already exists. If no local secret is present, it registers itself against the Gateway with:
+
+- `POST /api/agents/register`
+- `Authorization: Bearer <DEPLOYMENT_TOKEN>`
+- body: `{ "name": "<AGENT_NAME>", "token": "<DEPLOYMENT_TOKEN>" }`
+
+The Gateway returns an `agent_id` and an operational `agent_secret`; both are persisted locally in `.agent_secret`.
+
+After registration, the agent sends a periodic heartbeat to:
+
+- `POST /api/agents/{agent_id}/status`
+- `Authorization: Bearer <agent_secret>`
+- body: `{ "status": "RUNNING" }`
+
+Local/dev configuration:
+
+```bash
+export GATEWAY_URL="http://localhost:8080"
+export DEPLOYMENT_TOKEN="ag_xxx"
+export AGENT_NAME="local-agent-01"
+export AGENT_ALLOW_HTTP="true"
+```
+
 ---
 
 ## 🛠️ Development

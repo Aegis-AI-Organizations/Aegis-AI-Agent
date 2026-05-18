@@ -28,6 +28,8 @@ struct StatusUpdate {
     status: String,
 }
 
+const HEARTBEAT_STATUS: &str = "RUNNING";
+
 pub struct AegisClient {
     client: reqwest::Client,
     gateway_url: String,
@@ -85,7 +87,7 @@ impl AegisClient {
 
     pub async fn send_heartbeat(&self, config: &AgentConfig) -> Result<()> {
         let status = StatusUpdate {
-            status: "RUNNING".to_string(),
+            status: HEARTBEAT_STATUS.to_string(),
         };
 
         let resp = self

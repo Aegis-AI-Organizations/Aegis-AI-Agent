@@ -1,4 +1,7 @@
-use crate::domain::{ContainerNode, HostNode, PodNode, ProcessNode, SystemExtractor};
+use crate::domain::{
+    ActiveResource, ContainerNode, HostNode, PodNode, ProcessNode, SystemExtractor,
+    TopologyExtractor,
+};
 use k8s_openapi::api::core::v1::Pod;
 use kube::{api::ListParams, Api, Client};
 use std::collections::BTreeMap;
@@ -45,6 +48,29 @@ impl SystemExtractor for K8sExtractor {
         // Pods already contain containers in K8sExtractor::get_pods
         Ok(vec![])
     }
+}
+
+impl TopologyExtractor for K8sExtractor {
+    async fn list_active_resources(&self) -> anyhow::Result<Vec<ActiveResource>> {
+        let pods: Api<Pod> = Api::all(self.client.clone());
+        let lp = ListParams::default();
+        let list = pods.list(&lp).await?;
+
+        Ok(list
+            .items
+            .into_iter()
+            .filter(is_active_pod)
+            .map(map_pod_to_node)
+            .map(ActiveResource::Pod)
+            .collect())
+    }
+}
+
+pub fn is_active_pod(p: &Pod) -> bool {
+    !matches!(
+        p.status.as_ref().and_then(|status| status.phase.as_deref()),
+        Some("Succeeded" | "Failed")
+    )
 }
 
 pub fn map_pod_to_node(p: Pod) -> PodNode {
