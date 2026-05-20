@@ -5,6 +5,7 @@ use std::path::Path;
 
 pub const DEPLOYMENT_TOKEN_PREFIX: &str = "ag_";
 pub const DEPLOYMENT_TOKEN_BODY_MIN_LEN: usize = 43;
+pub const DEFAULT_GATEWAY_URL: &str = "https://api.aegis-ai.fr";
 
 pub fn get_agent_secret_file() -> String {
     std::env::var("AGENT_SECRET_FILE_OVERRIDE").unwrap_or_else(|_| ".agent_secret".to_string())
@@ -58,7 +59,7 @@ pub fn save_config(config: &AgentConfig) -> Result<()> {
 }
 
 pub fn get_gateway_url() -> String {
-    std::env::var("GATEWAY_URL").unwrap_or_else(|_| "http://localhost:8080".to_string())
+    std::env::var("GATEWAY_URL").unwrap_or_else(|_| DEFAULT_GATEWAY_URL.to_string())
 }
 
 pub fn get_deployment_token() -> Result<String> {
@@ -90,4 +91,14 @@ pub fn is_valid_deployment_token(token: &str) -> bool {
         && body
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
+}
+
+#[cfg(test)]
+mod tests {
+    use super::DEFAULT_GATEWAY_URL;
+
+    #[test]
+    fn default_gateway_url_uses_public_https_api() {
+        assert_eq!(DEFAULT_GATEWAY_URL, "https://api.aegis-ai.fr");
+    }
 }

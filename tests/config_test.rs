@@ -27,7 +27,7 @@ fn test_get_gateway_url_default() {
     unsafe {
         env::remove_var("GATEWAY_URL");
     }
-    assert_eq!(get_gateway_url(), "http://localhost:8080");
+    assert_eq!(get_gateway_url(), DEFAULT_GATEWAY_URL);
 }
 
 #[test]
