@@ -4,7 +4,9 @@ use crate::domain::{
     ContainerNode, HostNode, NetworkTopologyPayload, PodNode, ProtoContainer, ProtoHost,
     ProtoProcess, SystemExtractor,
 };
-use crate::extractor::{SysinfoExtractor, TopologyExtractor};
+use crate::extractor::SysinfoExtractor;
+#[cfg(any(feature = "docker", feature = "k8s"))]
+use crate::extractor::TopologyExtractor;
 use crate::redaction::Redactor;
 use anyhow::Result;
 use std::collections::BTreeMap;
@@ -53,24 +55,43 @@ pub async fn collect_topology(sys_extractor: &SysinfoExtractor) -> Result<Networ
     let host = sys_extractor.get_host_info().await?;
     let processes = sys_extractor.get_processes().await?;
 
+    #[allow(unused_mut)]
     let mut containers = Vec::new();
     #[cfg(feature = "docker")]
     if let Ok(docker_extractor) = crate::extractor::DockerExtractor::new() {
-        match docker_extractor.list_active_containers().await {
-            Ok(discovered) => containers.extend(discovered),
-            Err(e) => info!("Docker topology extraction skipped: {}", e),
+        match tokio::time::timeout(
+            Duration::from_secs(5),
+            docker_extractor.list_active_containers(),
+        )
+        .await
+        {
+            Ok(Ok(discovered)) => containers.extend(discovered),
+            Ok(Err(e)) => info!("Docker topology extraction skipped: {}", e),
+            Err(_) => info!("Docker topology extraction timed out after 5s"),
         }
     }
 
+    #[allow(unused_mut)]
     let mut pods = Vec::new();
     #[cfg(feature = "k8s")]
     if std::env::var("KUBERNETES_SERVICE_HOST").is_ok() {
-        match crate::extractor::K8sExtractor::new().await {
-            Ok(k8s_extractor) => match k8s_extractor.list_active_pods().await {
-                Ok(discovered) => pods.extend(discovered),
-                Err(e) => info!("Kubernetes topology extraction skipped: {}", e),
-            },
-            Err(e) => info!("Kubernetes client initialization skipped: {}", e),
+        match tokio::time::timeout(
+            Duration::from_secs(5),
+            crate::extractor::K8sExtractor::new(),
+        )
+        .await
+        {
+            Ok(Ok(k8s_extractor)) => {
+                match tokio::time::timeout(Duration::from_secs(5), k8s_extractor.list_active_pods())
+                    .await
+                {
+                    Ok(Ok(discovered)) => pods.extend(discovered),
+                    Ok(Err(e)) => info!("Kubernetes topology extraction skipped: {}", e),
+                    Err(_) => info!("Kubernetes topology extraction timed out after 5s"),
+                }
+            }
+            Ok(Err(e)) => info!("Kubernetes client initialization skipped: {}", e),
+            Err(_) => info!("Kubernetes client initialization timed out after 5s"),
         }
     }
 
@@ -108,7 +129,18 @@ pub fn build_network_topology(
 
 pub fn redact_payload(payload: &mut NetworkTopologyPayload, redactor: &Redactor) {
     for host in &mut payload.hosts {
-        host.hostname = redactor.redact(&host.hostname);
+        let original_hostname = host.hostname.clone();
+        let original_id = host.id.clone();
+
+        let redacted_hostname = redactor.redact(&original_hostname);
+        host.hostname = redacted_hostname.clone();
+
+        // If ID matches hostname, keep them consistent. Otherwise redact ID separately.
+        host.id = if original_id == original_hostname {
+            redacted_hostname
+        } else {
+            redactor.redact(&original_id)
+        };
 
         for proc in &mut host.processes {
             proc.name = redactor.redact(&proc.name);

@@ -37,3 +37,8 @@ fn test_redact_ip_address() {
     let redacted = redactor.redact(input);
     assert!(redacted.contains("<REDACTED_IP>"));
 }
+
+#[test]
+fn test_redactor_default() {
+    let _redactor = Redactor::default();
+}

@@ -158,6 +158,7 @@ async fn test_binary_startup() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_upload_payload_retries() {
     unsafe {
         std::env::set_var("AGENT_ALLOW_HTTP", "true");
