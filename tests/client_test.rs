@@ -1,5 +1,6 @@
 use aegis_ai_agent::client::AegisClient;
 use aegis_ai_agent::config::AgentConfig;
+use mockito::{self, Matcher};
 
 #[tokio::test]
 async fn test_register_success() {
@@ -11,6 +12,14 @@ async fn test_register_success() {
 
     let _m = server
         .mock("POST", "/api/agents/register")
+        .match_header(
+            "authorization",
+            "Bearer ag_0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefg",
+        )
+        .match_body(Matcher::JsonString(
+            r#"{"name":"agent-01","token":"ag_0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefg"}"#
+                .to_string(),
+        ))
         .with_status(200)
         .with_header("content-type", "application/json")
         .with_body(r#"{"agent_id": "123", "agent_secret": "abc"}"#)
@@ -67,6 +76,8 @@ async fn test_heartbeat_success() {
 
     let _m = server
         .mock("POST", "/api/agents/123/status")
+        .match_header("authorization", "Bearer abc")
+        .match_body(Matcher::JsonString(r#"{"status":"RUNNING"}"#.to_string()))
         .with_status(200)
         .create_async()
         .await;
