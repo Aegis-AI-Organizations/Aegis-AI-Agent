@@ -1,6 +1,8 @@
-use aegis_ai_agent::discovery::{build_network_topology, collect_topology, redact_payload};
+use aegis_ai_agent::discovery::{
+    build_network_topology, build_network_topology_from_resources, collect_topology, redact_payload,
+};
 use aegis_ai_agent::domain::{
-    ContainerNode, HostNode, NetworkTopologyPayload, PodNode, ProcessNode,
+    ActiveResource, ContainerNode, HostNode, NetworkTopologyPayload, PodNode, ProcessNode,
 };
 use aegis_ai_agent::extractor::SysinfoExtractor;
 use aegis_ai_agent::redaction::Redactor;
@@ -124,6 +126,68 @@ fn test_build_network_topology_merges_docker_and_k8s_without_duplicates() {
 }
 
 #[test]
+fn test_build_network_topology_from_resources_assembles_single_payload() {
+    let payload = build_network_topology_from_resources(
+        HostNode {
+            hostname: "host-1".to_string(),
+            os: "Linux".to_string(),
+            kernel: "6.1".to_string(),
+            uptime: 42,
+            total_ram: 1024,
+        },
+        vec![ProcessNode {
+            pid: 42,
+            name: "agent".to_string(),
+            user: "aegis".to_string(),
+            args: Some(vec!["--scan".to_string()]),
+        }],
+        vec![
+            ActiveResource::Container(ContainerNode {
+                id: "abc123".to_string(),
+                name: "api".to_string(),
+                image: "api:latest".to_string(),
+                state: "running".to_string(),
+                env: BTreeMap::new(),
+            }),
+            ActiveResource::Pod(PodNode {
+                name: "api-pod".to_string(),
+                namespace: "default".to_string(),
+                ip: Some("10.0.0.10".to_string()),
+                labels: BTreeMap::new(),
+                containers: vec![
+                    ContainerNode {
+                        id: "docker://abc123".to_string(),
+                        name: "api".to_string(),
+                        image: "api:latest".to_string(),
+                        state: "running".to_string(),
+                        env: BTreeMap::new(),
+                    },
+                    ContainerNode {
+                        id: "pod-only".to_string(),
+                        name: "sidecar".to_string(),
+                        image: "sidecar:latest".to_string(),
+                        state: "running".to_string(),
+                        env: BTreeMap::new(),
+                    },
+                ],
+                connections: Vec::new(),
+            }),
+        ],
+    );
+
+    assert_eq!(payload.hosts.len(), 1);
+    assert_eq!(payload.hosts[0].containers.len(), 2);
+    assert!(payload.hosts[0]
+        .containers
+        .iter()
+        .any(|container| container.id == "abc123"));
+    assert!(payload.hosts[0]
+        .containers
+        .iter()
+        .any(|container| container.id == "pod-only"));
+}
+
+#[test]
 fn test_network_topology_json_matches_protobuf_contract() {
     let payload = build_network_topology(
         HostNode {
@@ -154,6 +218,30 @@ fn test_network_topology_json_matches_protobuf_contract() {
     let host = &value["hosts"][0];
     let process = &host["processes"][0];
     let container = &host["containers"][0];
+    let root_keys: std::collections::BTreeSet<_> = value
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
+    let host_keys: std::collections::BTreeSet<_> = host
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
+    let process_keys: std::collections::BTreeSet<_> = process
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
+    let container_keys: std::collections::BTreeSet<_> = container
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
 
     assert!(value.get("hosts").is_some());
     assert!(host.get("ipAddresses").is_some());
@@ -161,6 +249,23 @@ fn test_network_topology_json_matches_protobuf_contract() {
     assert!(host.get("pods").is_none());
     assert!(container.get("env").is_none());
     assert!(container.get("state").is_none());
+    assert_eq!(root_keys, ["hosts"].into_iter().collect());
+    assert_eq!(
+        host_keys,
+        ["containers", "hostname", "id", "ipAddresses", "processes"]
+            .into_iter()
+            .collect()
+    );
+    assert_eq!(
+        process_keys,
+        ["commandLine", "name", "pid", "user"].into_iter().collect()
+    );
+    assert_eq!(
+        container_keys,
+        ["id", "image", "name", "ports", "processes"]
+            .into_iter()
+            .collect()
+    );
 
     serde_json::from_str::<NetworkTopologyPayload>(&json).unwrap();
 }

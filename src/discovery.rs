@@ -1,8 +1,8 @@
 use crate::client::AegisClient;
 use crate::config::AgentConfig;
 use crate::domain::{
-    ContainerNode, HostNode, NetworkTopologyPayload, PodNode, ProtoContainer, ProtoHost,
-    ProtoProcess, SystemExtractor,
+    ActiveResource, ContainerNode, HostNode, NetworkTopologyPayload, PodNode, ProtoContainer,
+    ProtoHost, ProtoProcess, SystemExtractor,
 };
 use crate::extractor::{SysinfoExtractor, TopologyExtractor};
 use crate::redaction::Redactor;
@@ -52,29 +52,44 @@ pub async fn start_discovery_loop(config: AgentConfig) -> Result<()> {
 pub async fn collect_topology(sys_extractor: &SysinfoExtractor) -> Result<NetworkTopologyPayload> {
     let host = sys_extractor.get_host_info().await?;
     let processes = sys_extractor.get_processes().await?;
+    let resources = collect_runtime_resources().await;
 
-    let mut containers = Vec::new();
+    Ok(build_network_topology_from_resources(host, processes, resources))
+}
+
+async fn collect_runtime_resources() -> Vec<ActiveResource> {
+    let mut resources = Vec::new();
+
     #[cfg(feature = "docker")]
-    if let Ok(docker_extractor) = crate::extractor::DockerExtractor::new() {
-        match docker_extractor.list_active_containers().await {
-            Ok(discovered) => containers.extend(discovered),
-            Err(e) => info!("Docker topology extraction skipped: {}", e),
+    match crate::extractor::DockerExtractor::new() {
+        Ok(docker_extractor) => {
+            collect_resources_from_extractor("Docker", &docker_extractor, &mut resources).await
         }
+        Err(e) => info!("Docker extractor initialization skipped: {}", e),
     }
 
-    let mut pods = Vec::new();
     #[cfg(feature = "k8s")]
     if std::env::var("KUBERNETES_SERVICE_HOST").is_ok() {
         match crate::extractor::K8sExtractor::new().await {
-            Ok(k8s_extractor) => match k8s_extractor.list_active_pods().await {
-                Ok(discovered) => pods.extend(discovered),
-                Err(e) => info!("Kubernetes topology extraction skipped: {}", e),
-            },
+            Ok(k8s_extractor) => {
+                collect_resources_from_extractor("Kubernetes", &k8s_extractor, &mut resources).await
+            }
             Err(e) => info!("Kubernetes client initialization skipped: {}", e),
         }
     }
 
-    Ok(build_network_topology(host, processes, containers, pods))
+    resources
+}
+
+async fn collect_resources_from_extractor<T: TopologyExtractor>(
+    extractor_name: &str,
+    extractor: &T,
+    resources: &mut Vec<ActiveResource>,
+) {
+    match extractor.list_active_resources().await {
+        Ok(discovered) => resources.extend(discovered),
+        Err(e) => info!("{} topology extraction skipped: {}", extractor_name, e),
+    }
 }
 
 pub fn build_network_topology(
@@ -83,15 +98,32 @@ pub fn build_network_topology(
     containers: Vec<ContainerNode>,
     pods: Vec<PodNode>,
 ) -> NetworkTopologyPayload {
+    let resources = containers
+        .into_iter()
+        .map(ActiveResource::Container)
+        .chain(pods.into_iter().map(ActiveResource::Pod))
+        .collect();
+
+    build_network_topology_from_resources(host, processes, resources)
+}
+
+pub fn build_network_topology_from_resources(
+    host: HostNode,
+    processes: Vec<crate::domain::ProcessNode>,
+    resources: Vec<ActiveResource>,
+) -> NetworkTopologyPayload {
     let mut merged_containers = BTreeMap::new();
 
-    for container in containers {
-        insert_container(&mut merged_containers, proto_container_from_node(container));
-    }
-
-    for pod in pods {
-        for container in pod.containers {
-            insert_container(&mut merged_containers, proto_container_from_node(container));
+    for resource in resources {
+        match resource {
+            ActiveResource::Container(container) => {
+                insert_container(&mut merged_containers, proto_container_from_node(container));
+            }
+            ActiveResource::Pod(pod) => {
+                for container in pod.containers {
+                    insert_container(&mut merged_containers, proto_container_from_node(container));
+                }
+            }
         }
     }
 
