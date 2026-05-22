@@ -1,6 +1,6 @@
 use aegis_ai_agent::extractor::{
-    docker, k8s, ActiveResource, ContainerNode, PodNode, SysinfoExtractor, SystemExtractor,
-    TopologyExtractor,
+    docker, filter_host_processes, k8s, ActiveResource, ContainerNode, PodNode, ProcessNode,
+    SysinfoExtractor, SystemExtractor, TopologyExtractor,
 };
 use k8s_openapi::api::core::v1::{Container, Pod, PodSpec, PodStatus};
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
@@ -90,6 +90,91 @@ async fn test_topology_extractor_default_resource_filters() {
 fn test_normalize_container_name() {
     assert_eq!(docker::normalize_container_name("/redis"), "redis");
     assert_eq!(docker::normalize_container_name("mysql"), "mysql");
+}
+
+#[test]
+fn test_docker_socket_candidates_prioritize_current_context() {
+    let home = std::path::Path::new("/Users/tester");
+    let candidates = docker::docker_socket_candidates(None, Some(home), Some("orbstack"));
+
+    assert_eq!(
+        candidates.first().map(String::as_str),
+        Some("unix:///Users/tester/.orbstack/run/docker.sock")
+    );
+    assert!(candidates.contains(&"unix:///var/run/docker.sock".to_string()));
+}
+
+#[test]
+fn test_docker_socket_candidates_honor_docker_host_override() {
+    let candidates = docker::docker_socket_candidates(
+        Some("unix:///tmp/custom-docker.sock"),
+        Some(std::path::Path::new("/Users/tester")),
+        Some("desktop-linux"),
+    );
+
+    assert_eq!(
+        candidates.first().map(String::as_str),
+        Some("unix:///tmp/custom-docker.sock")
+    );
+}
+
+#[test]
+fn test_filter_host_processes_keeps_runtime_processes_and_drops_noise() {
+    let filtered = filter_host_processes(vec![
+        ProcessNode {
+            pid: 10,
+            name: "aegis-ai-agent".to_string(),
+            user: "Uid(501)".to_string(),
+            args: None,
+        },
+        ProcessNode {
+            pid: 11,
+            name: "com.docker.backend".to_string(),
+            user: "Uid(501)".to_string(),
+            args: None,
+        },
+        ProcessNode {
+            pid: 12,
+            name: "Browser Helper (Renderer)".to_string(),
+            user: "Uid(501)".to_string(),
+            args: None,
+        },
+        ProcessNode {
+            pid: 13,
+            name: "WidgetConfigurationExtension".to_string(),
+            user: "Uid(501)".to_string(),
+            args: None,
+        },
+        ProcessNode {
+            pid: 14,
+            name: "node".to_string(),
+            user: "Uid(501)".to_string(),
+            args: None,
+        },
+        ProcessNode {
+            pid: 15,
+            name: "SystemUIServer".to_string(),
+            user: "unknown".to_string(),
+            args: None,
+        },
+    ]);
+
+    assert!(filtered
+        .iter()
+        .any(|process| process.name == "aegis-ai-agent"));
+    assert!(filtered
+        .iter()
+        .any(|process| process.name == "com.docker.backend"));
+    assert!(filtered.iter().any(|process| process.name == "node"));
+    assert!(!filtered
+        .iter()
+        .any(|process| process.name == "Browser Helper (Renderer)"));
+    assert!(!filtered
+        .iter()
+        .any(|process| process.name == "WidgetConfigurationExtension"));
+    assert!(!filtered
+        .iter()
+        .any(|process| process.name == "SystemUIServer"));
 }
 
 #[test]

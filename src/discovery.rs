@@ -54,7 +54,9 @@ pub async fn collect_topology(sys_extractor: &SysinfoExtractor) -> Result<Networ
     let processes = sys_extractor.get_processes().await?;
     let resources = collect_runtime_resources().await;
 
-    Ok(build_network_topology_from_resources(host, processes, resources))
+    Ok(build_network_topology_from_resources(
+        host, processes, resources,
+    ))
 }
 
 async fn collect_runtime_resources() -> Vec<ActiveResource> {
@@ -69,13 +71,11 @@ async fn collect_runtime_resources() -> Vec<ActiveResource> {
     }
 
     #[cfg(feature = "k8s")]
-    if std::env::var("KUBERNETES_SERVICE_HOST").is_ok() {
-        match crate::extractor::K8sExtractor::new().await {
-            Ok(k8s_extractor) => {
-                collect_resources_from_extractor("Kubernetes", &k8s_extractor, &mut resources).await
-            }
-            Err(e) => info!("Kubernetes client initialization skipped: {}", e),
+    match crate::extractor::K8sExtractor::new().await {
+        Ok(k8s_extractor) => {
+            collect_resources_from_extractor("Kubernetes", &k8s_extractor, &mut resources).await
         }
+        Err(e) => info!("Kubernetes client initialization skipped: {}", e),
     }
 
     resources

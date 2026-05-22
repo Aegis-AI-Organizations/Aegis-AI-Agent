@@ -4,7 +4,10 @@ use crate::domain::{
 };
 use bollard::container::ListContainersOptions;
 use bollard::Docker;
+use bollard::API_DEFAULT_VERSION;
 use std::collections::BTreeMap;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 /// SystemExtractor implementation using `bollard` to query the local Docker daemon.
 pub struct DockerExtractor {
@@ -14,10 +17,93 @@ pub struct DockerExtractor {
 impl DockerExtractor {
     /// Connects to the local Docker socket.
     pub fn new() -> anyhow::Result<Self> {
-        let docker = Docker::connect_with_local_defaults()
+        let docker = connect_to_docker_socket()
             .map_err(|e| anyhow::anyhow!("Failed to connect to Docker socket: {}", e))?;
         Ok(Self { docker })
     }
+}
+
+fn connect_to_docker_socket() -> Result<Docker, bollard::errors::Error> {
+    let mut last_error = None;
+
+    for candidate in docker_socket_candidates(
+        std::env::var("DOCKER_HOST").ok().as_deref(),
+        docker_home_dir().as_deref(),
+        read_current_docker_context(docker_home_dir().as_deref()).as_deref(),
+    ) {
+        match Docker::connect_with_unix(&candidate, 120, API_DEFAULT_VERSION) {
+            Ok(docker) => return Ok(docker),
+            Err(err) => last_error = Some(err),
+        }
+    }
+
+    Docker::connect_with_local_defaults().map_err(|err| last_error.unwrap_or(err))
+}
+
+fn docker_home_dir() -> Option<PathBuf> {
+    std::env::var_os("HOME").map(PathBuf::from)
+}
+
+fn read_current_docker_context(home_dir: Option<&Path>) -> Option<String> {
+    let config_path = home_dir?.join(".docker/config.json");
+    let config = fs::read_to_string(config_path).ok()?;
+    let value: serde_json::Value = serde_json::from_str(&config).ok()?;
+    value
+        .get("currentContext")
+        .and_then(serde_json::Value::as_str)
+        .map(ToOwned::to_owned)
+}
+
+pub fn docker_socket_candidates(
+    docker_host: Option<&str>,
+    home_dir: Option<&Path>,
+    current_context: Option<&str>,
+) -> Vec<String> {
+    let mut candidates = Vec::new();
+
+    if let Some(host) = docker_host {
+        if host.starts_with("unix://") {
+            candidates.push(host.to_string());
+        } else if host.starts_with('/') {
+            candidates.push(format!("unix://{}", host));
+        }
+    }
+
+    if let Some(home) = home_dir {
+        if let Some(context) = current_context {
+            match context {
+                "orbstack" => candidates.push(format!(
+                    "unix://{}",
+                    home.join(".orbstack/run/docker.sock").display()
+                )),
+                "desktop-linux" => candidates.push(format!(
+                    "unix://{}",
+                    home.join(".docker/run/docker.sock").display()
+                )),
+                _ => {}
+            }
+        }
+
+        candidates.push(format!(
+            "unix://{}",
+            home.join(".orbstack/run/docker.sock").display()
+        ));
+        candidates.push(format!(
+            "unix://{}",
+            home.join(".docker/run/docker.sock").display()
+        ));
+    }
+
+    candidates.push("unix:///var/run/docker.sock".to_string());
+
+    let mut deduped = Vec::new();
+    for candidate in candidates {
+        if !deduped.contains(&candidate) {
+            deduped.push(candidate);
+        }
+    }
+
+    deduped
 }
 
 impl SystemExtractor for DockerExtractor {
