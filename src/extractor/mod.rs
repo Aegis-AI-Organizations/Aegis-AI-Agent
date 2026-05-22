@@ -113,7 +113,7 @@ pub fn filter_host_processes(mut processes: Vec<ProcessNode>) -> Vec<ProcessNode
                 && process.user != "unknown"
                 && (include_all || is_relevant_host_process(process)))
     });
-    processes.sort_by(|left, right| left.pid.cmp(&right.pid));
+    processes.sort_by_key(|left| left.pid);
 
     if processes.len() > max_processes {
         let mut tail = processes.split_off(processes.len() - max_processes);
@@ -121,7 +121,7 @@ pub fn filter_host_processes(mut processes: Vec<ProcessNode>) -> Vec<ProcessNode
             if let Some(current_process) = processes.into_iter().find(|p| p.pid == current_pid) {
                 tail.remove(0);
                 tail.push(current_process);
-                tail.sort_by(|left, right| left.pid.cmp(&right.pid));
+                tail.sort_by_key(|left| left.pid);
             }
         }
         tail
