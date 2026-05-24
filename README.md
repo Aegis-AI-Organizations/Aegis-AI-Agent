@@ -16,7 +16,7 @@ The Agent acts as the platform's "Eyes and Ears" on the ground. It is designed f
 
 ```mermaid
 graph LR
-    Target[Target Apps] -- "Logs/Trace" --> Agent[Aegis Agent (Rust)]
+    Target[Target Apps] -- "Logs/Trace" --> Agent[Aegis Agent - Rust]
     Agent -- "gRPC / mTLS" --> Nginx[Nginx Ingress]
     Nginx -- "Batch Write" --> Ingest[Ingest Worker]
 ```
