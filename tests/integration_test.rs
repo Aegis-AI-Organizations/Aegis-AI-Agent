@@ -64,6 +64,57 @@ async fn test_not_found_integration() {
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
+#[tokio::test]
+#[serial]
+async fn test_scan_endpoint_inactive_integration() {
+    let app = create_router();
+
+    // Ensure it is not set (mocking clean state)
+    // Create a dummy channel and drop it to clear any previous state
+    let (tx, _) = tokio::sync::mpsc::channel(1);
+    aegis_ai_agent::discovery::set_mock_scan_trigger(tx);
+    // Dropping the receiver of the channel will make the sender fail to send, returning false.
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/admin/system/scan")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+}
+
+#[tokio::test]
+#[serial]
+async fn test_scan_endpoint_active_integration() {
+    let app = create_router();
+
+    // Set a mock scan trigger
+    let (tx, mut rx) = tokio::sync::mpsc::channel(10);
+    aegis_ai_agent::discovery::set_mock_scan_trigger(tx);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/admin/system/scan")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::ACCEPTED);
+
+    // Verify the scan trigger was actually received
+    assert!(rx.recv().await.is_some());
+}
+
 #[test]
 fn test_startup_banner() {
     assert_eq!(

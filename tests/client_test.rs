@@ -104,7 +104,7 @@ async fn test_get_upload_url_success() {
         .mock("GET", "/api/agents/123/upload-url?filename=test.txt")
         .with_status(200)
         .with_header("content-type", "application/json")
-        .with_body(r#"{"url": "http://minio/upload", "method": "PUT"}"#)
+        .with_body(r#"{"url": "http://minio/upload", "method": "PUT", "object_name": "agents/123/test.txt"}"#)
         .create_async()
         .await;
 
@@ -116,7 +116,13 @@ async fn test_get_upload_url_success() {
 
     let result = client.get_upload_url(&config, "test.txt").await;
     assert!(result.is_ok());
-    assert_eq!(result.unwrap(), "http://minio/upload");
+    assert_eq!(
+        result.unwrap(),
+        (
+            "http://minio/upload".to_string(),
+            "agents/123/test.txt".to_string()
+        )
+    );
 }
 
 #[tokio::test]

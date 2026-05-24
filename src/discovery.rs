@@ -8,9 +8,30 @@ use crate::extractor::{SysinfoExtractor, TopologyExtractor};
 use crate::redaction::Redactor;
 use anyhow::Result;
 use std::collections::BTreeMap;
+use std::sync::Mutex;
 use std::time::Duration;
+use tokio::sync::mpsc;
 use tokio::time;
 use tracing::{error, info};
+
+static SCAN_TRIGGER: Mutex<Option<mpsc::Sender<()>>> = Mutex::new(None);
+
+/// Triggers a manual system topology discovery and upload.
+/// Returns true if the scan signal was successfully sent.
+pub fn trigger_topology_scan() -> bool {
+    if let Ok(guard) = SCAN_TRIGGER.lock() {
+        if let Some(ref tx) = *guard {
+            return tx.try_send(()).is_ok();
+        }
+    }
+    false
+}
+
+pub fn set_mock_scan_trigger(tx: mpsc::Sender<()>) {
+    if let Ok(mut guard) = SCAN_TRIGGER.lock() {
+        *guard = Some(tx);
+    }
+}
 
 pub async fn start_discovery_loop(config: AgentConfig) -> Result<()> {
     let gateway_url = crate::config::get_gateway_url();
@@ -18,25 +39,56 @@ pub async fn start_discovery_loop(config: AgentConfig) -> Result<()> {
     let redactor = Redactor::new();
     let sys_extractor = SysinfoExtractor::new();
 
-    let mut interval = time::interval(Duration::from_secs(300)); // Every 5 minutes
+    let mut interval = time::interval(Duration::from_secs(900)); // Every 15 minutes
+    let (tx, mut rx) = mpsc::channel::<()>(10);
+
+    if let Ok(mut guard) = SCAN_TRIGGER.lock() {
+        *guard = Some(tx);
+    }
+
+    let mut last_payload: Option<NetworkTopologyPayload> = None;
 
     loop {
-        interval.tick().await;
-        info!("Starting topology discovery...");
+        let force_upload = tokio::select! {
+            _ = interval.tick() => false,
+            Some(_) = rx.recv() => true,
+        };
+
+        info!(
+            "Starting topology discovery (force_upload={})...",
+            force_upload
+        );
 
         match collect_topology(&sys_extractor).await {
             Ok(mut payload) => {
                 // Apply redaction to all text fields in the topology
                 redact_payload(&mut payload, &redactor);
 
+                // If this is a periodic tick (not forced), skip upload if unchanged
+                if !force_upload {
+                    if let Some(ref last) = last_payload {
+                        if last == &payload {
+                            info!("Topology unchanged, skipping upload.");
+                            continue;
+                        }
+                    }
+                }
+
                 let filename = format!("topology_{}.json", chrono::Utc::now().timestamp());
                 match client.get_upload_url(&config, &filename).await {
-                    Ok(url) => match serde_json::to_vec(&payload) {
+                    Ok((url, object_name)) => match serde_json::to_vec(&payload) {
                         Ok(data) => {
                             if let Err(e) = client.upload_payload(&url, data).await {
                                 error!("Failed to upload topology payload: {}", e);
                             } else {
                                 info!("Topology uploaded successfully as {}", filename);
+                                last_payload = Some(payload);
+                                if let Err(e) = client
+                                    .update_status(&config, "UPLOAD_COMPLETE", Some(&object_name))
+                                    .await
+                                {
+                                    error!("Failed to notify status update UPLOAD_COMPLETE: {}", e);
+                                }
                             }
                         }
                         Err(e) => error!("Failed to serialize topology: {}", e),

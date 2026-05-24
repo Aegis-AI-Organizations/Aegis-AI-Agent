@@ -21,11 +21,14 @@ struct UploadLinkResponse {
     url: String,
     #[allow(dead_code)]
     method: String,
+    object_name: String,
 }
 
 #[derive(Serialize)]
 struct StatusUpdate {
     status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    payload_key: Option<String>,
 }
 
 const HEARTBEAT_STATUS: &str = "RUNNING";
@@ -33,6 +36,7 @@ const HEARTBEAT_STATUS: &str = "RUNNING";
 pub struct AegisClient {
     client: reqwest::Client,
     gateway_url: String,
+    original_minio_host: std::sync::Mutex<Option<String>>,
 }
 
 impl AegisClient {
@@ -48,6 +52,7 @@ impl AegisClient {
         Self {
             client,
             gateway_url,
+            original_minio_host: std::sync::Mutex::new(None),
         }
     }
 
@@ -88,6 +93,7 @@ impl AegisClient {
     pub async fn send_heartbeat(&self, config: &AgentConfig) -> Result<()> {
         let status = StatusUpdate {
             status: HEARTBEAT_STATUS.to_string(),
+            payload_key: None,
         };
 
         let resp = self
@@ -109,7 +115,11 @@ impl AegisClient {
         Ok(())
     }
 
-    pub async fn get_upload_url(&self, config: &AgentConfig, filename: &str) -> Result<String> {
+    pub async fn get_upload_url(
+        &self,
+        config: &AgentConfig,
+        filename: &str,
+    ) -> Result<(String, String)> {
         let resp = self
             .client
             .get(format!(
@@ -134,10 +144,24 @@ impl AegisClient {
         let mut final_url = link_resp.url;
         // WORKAROUND: If we are in local dev, replace docker internal hostname with localhost
         if env::var("AGENT_ALLOW_HTTP").unwrap_or_default() == "true" {
-            final_url = final_url.replace("http://minio:9000", "http://localhost:9000");
+            if let Some(start) = final_url.find("://") {
+                let rest = &final_url[start + 3..];
+                if let Some(end) = rest.find('/') {
+                    let host_port = &rest[..end];
+                    if host_port.contains("minio")
+                        && host_port.contains(':')
+                        && host_port != "localhost:9000"
+                    {
+                        if let Ok(mut guard) = self.original_minio_host.lock() {
+                            *guard = Some(host_port.to_string());
+                        }
+                        final_url = final_url.replace(host_port, "localhost:9000");
+                    }
+                }
+            }
         }
 
-        Ok(final_url)
+        Ok((final_url, link_resp.object_name))
     }
 
     pub async fn upload_payload(&self, presigned_url: &str, data: Vec<u8>) -> Result<()> {
@@ -151,7 +175,12 @@ impl AegisClient {
 
             // WORKAROUND: If we replaced minio with localhost, we must restore the Host header for S3 signature validation
             if presigned_url.contains("localhost:9000") {
-                request = request.header("Host", "minio:9000");
+                let host_header = if let Ok(guard) = self.original_minio_host.lock() {
+                    guard.clone().unwrap_or_else(|| "minio:9000".to_string())
+                } else {
+                    "minio:9000".to_string()
+                };
+                request = request.header("Host", host_header);
             }
 
             let resp = request.send().await;
@@ -183,5 +212,35 @@ impl AegisClient {
             tokio::time::sleep(backoff).await;
             backoff *= 2;
         }
+    }
+
+    pub async fn update_status(
+        &self,
+        config: &AgentConfig,
+        status: &str,
+        payload_key: Option<&str>,
+    ) -> Result<()> {
+        let status_payload = StatusUpdate {
+            status: status.to_string(),
+            payload_key: payload_key.map(|s| s.to_string()),
+        };
+
+        let resp = self
+            .client
+            .post(format!(
+                "{}/api/agents/{}/status",
+                self.gateway_url, config.agent_id
+            ))
+            .header("Authorization", format!("Bearer {}", config.agent_secret))
+            .json(&status_payload)
+            .send()
+            .await
+            .context("Failed to send status update request")?;
+
+        if !resp.status().is_success() {
+            anyhow::bail!("Status update failed with status: {}", resp.status());
+        }
+
+        Ok(())
     }
 }
