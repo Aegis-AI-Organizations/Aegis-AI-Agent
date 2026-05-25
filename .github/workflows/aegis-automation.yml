@@ -149,7 +149,7 @@ jobs:
           if [[ "$REPO_NAME" == *"Brain"* ]]; then COMPONENT="Brain"; fi
           if [[ "$REPO_NAME" == *"Dashboard"* ]]; then COMPONENT="Dashboard"; fi
           if [[ "$REPO_NAME" == *"Documentation"* ]]; then COMPONENT="Documentation"; fi
-          if [[ "$REPO_NAME" == *"Infra"* ]]; then COMPONENT="Infra"; fi
+          if [[ "$REPO_NAME" == *"Infra"* ]]; then COMPONENT="Infra & SecOps"; fi
           if [[ "$REPO_NAME" == *"Landing"* ]]; then COMPONENT="Landing"; fi
           if [[ "$REPO_NAME" == *"Proto"* ]]; then COMPONENT="Contracts"; fi
           if [[ "$REPO_NAME" == *"Worker-Ingest"* ]]; then COMPONENT="Ingest"; fi
@@ -200,7 +200,7 @@ jobs:
           if [[ "$REPO_NAME" == *"Brain"* ]]; then COMPONENT="Brain (Python)"; fi
           if [[ "$REPO_NAME" == *"Dashboard"* ]]; then COMPONENT="Dashboard (Web)"; fi
           if [[ "$REPO_NAME" == *"Documentation"* ]]; then COMPONENT="Documentation"; fi
-          if [[ "$REPO_NAME" == *"Infra"* ]]; then COMPONENT="Infra"; fi
+          if [[ "$REPO_NAME" == *"Infra"* ]]; then COMPONENT="Infra & SecOps"; fi
           if [[ "$REPO_NAME" == *"Landing"* ]]; then COMPONENT="Landing Page"; fi
           if [[ "$REPO_NAME" == *"Proto"* ]]; then COMPONENT="Contracts (Proto)"; fi
           if [[ "$REPO_NAME" == *"Worker-Ingest"* ]]; then COMPONENT="Worker (Ingest)"; fi
