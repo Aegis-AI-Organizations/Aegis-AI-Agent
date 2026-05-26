@@ -80,10 +80,13 @@ jobs:
           generate_release_notes: true
 
       - name: Upload Static Binary to MinIO Releases Bucket
-        if: ${{ secrets.MINIO_ACCESS_KEY != '' && secrets.MINIO_SECRET_KEY != '' }}
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.MINIO_ACCESS_KEY }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.MINIO_SECRET_KEY }}
           AWS_DEFAULT_REGION: us-east-1
         run: |
+          if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
+            echo "MinIO release credentials are not configured; skipping upload."
+            exit 0
+          fi
           aws s3 cp aegis-ai-agent s3://releases/aegis-ai-agent --endpoint-url https://storage.aegis-ai.fr
