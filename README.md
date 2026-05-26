@@ -44,12 +44,32 @@ graph LR
 
 ---
 
-## 🐳 Deployment (Docker)
+## 🚀 Installation & Deployment
+
+Choose the best deployment method for your infrastructure:
+
+### 1. Standalone Linux (Hardened Systemd Service)
+For standard VM or bare-metal servers, you can run a single command to automatically download, install, and run the agent as a systemd daemon:
+
+```bash
+curl -sL https://api.aegis-ai.fr/install.sh?token=YOUR_DEPLOYMENT_TOKEN | sudo bash
+```
+This script dynamically injects your deployment token, registers the agent securely, sets up sandboxed systemd configuration, and starts the service.
+
+### 2. Kubernetes Cluster (Helm Chart DaemonSet)
+To deploy the agent across all worker nodes in your Kubernetes cluster, use the Helm chart:
+
+```bash
+helm install aegis-agent ./chart --set token=YOUR_DEPLOYMENT_TOKEN
+```
+*Note: The `--set token=XYZ` parameter is strictly required; the installation will fail if the deployment token is omitted.*
+
+### 3. Manual Container Run (Docker)
+Alternatively, run the agent manually in an unprivileged container:
 
 ```bash
 docker pull ghcr.io/aegis-ai/aegis-agent:latest
 
-# Run as a unprivileged container
 docker run -d \
   --name aegis-agent \
   --read-only \
