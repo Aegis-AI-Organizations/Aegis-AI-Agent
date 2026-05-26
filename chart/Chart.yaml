@@ -1,0 +1,6 @@
+apiVersion: v2
+name: aegis-agent
+description: A Helm chart to deploy Aegis AI Agent as a DaemonSet on all cluster nodes.
+type: application
+version: 0.1.0
+appVersion: "latest"
