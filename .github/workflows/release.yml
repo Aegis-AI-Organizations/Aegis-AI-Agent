@@ -80,6 +80,7 @@ jobs:
           generate_release_notes: true
 
       - name: Upload Static Binary to MinIO Releases Bucket
+        if: ${{ secrets.MINIO_ACCESS_KEY != '' && secrets.MINIO_SECRET_KEY != '' }}
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.MINIO_ACCESS_KEY }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.MINIO_SECRET_KEY }}
