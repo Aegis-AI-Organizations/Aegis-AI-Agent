@@ -85,6 +85,7 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.MINIO_SECRET_KEY }}
           AWS_DEFAULT_REGION: us-east-1
         run: |
+          # Releases remain valid when the optional public mirror is not configured.
           if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
             echo "MinIO release credentials are not configured; skipping upload."
             exit 0
