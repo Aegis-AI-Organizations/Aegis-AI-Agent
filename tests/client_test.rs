@@ -126,6 +126,69 @@ async fn test_get_upload_url_success() {
 }
 
 #[tokio::test]
+async fn test_get_upload_url_accepts_missing_object_name() {
+    unsafe {
+        std::env::set_var("AGENT_ALLOW_HTTP", "true");
+    }
+    let mut server = mockito::Server::new_async().await;
+    let url = server.url();
+
+    let _m = server
+        .mock("GET", "/api/agents/123/upload-url?filename=test.txt")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(r#"{"url": "http://minio/upload", "method": "PUT"}"#)
+        .create_async()
+        .await;
+
+    let client = AegisClient::new(url);
+    let config = AgentConfig {
+        agent_id: "123".to_string(),
+        agent_secret: "abc".to_string(),
+    };
+
+    let result = client.get_upload_url(&config, "test.txt").await;
+    assert!(result.is_ok());
+    assert_eq!(
+        result.unwrap(),
+        ("http://minio/upload".to_string(), "".to_string())
+    );
+}
+
+#[tokio::test]
+async fn test_get_upload_url_accepts_camel_case_object_name() {
+    unsafe {
+        std::env::set_var("AGENT_ALLOW_HTTP", "true");
+    }
+    let mut server = mockito::Server::new_async().await;
+    let url = server.url();
+
+    let _m = server
+        .mock("GET", "/api/agents/123/upload-url?filename=test.txt")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(r#"{"url": "http://minio/upload", "method": "PUT", "objectName": "agents/123/test.txt"}"#)
+        .create_async()
+        .await;
+
+    let client = AegisClient::new(url);
+    let config = AgentConfig {
+        agent_id: "123".to_string(),
+        agent_secret: "abc".to_string(),
+    };
+
+    let result = client.get_upload_url(&config, "test.txt").await;
+    assert!(result.is_ok());
+    assert_eq!(
+        result.unwrap(),
+        (
+            "http://minio/upload".to_string(),
+            "agents/123/test.txt".to_string()
+        )
+    );
+}
+
+#[tokio::test]
 async fn test_upload_payload_immediate_success() {
     unsafe {
         std::env::set_var("AGENT_ALLOW_HTTP", "true");

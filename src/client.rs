@@ -21,6 +21,7 @@ struct UploadLinkResponse {
     url: String,
     #[allow(dead_code)]
     method: String,
+    #[serde(default, alias = "objectName")]
     object_name: String,
 }
 
