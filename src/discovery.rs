@@ -252,7 +252,9 @@ fn merge_container(existing: &mut ProtoContainer, incoming: &ProtoContainer) {
     if existing.run_as_root.is_none() {
         existing.run_as_root = incoming.run_as_root;
     }
-    existing.exposed_ports.extend(incoming.exposed_ports.clone());
+    existing
+        .exposed_ports
+        .extend(incoming.exposed_ports.clone());
     if existing.sensitive_volumes.is_empty() {
         existing.sensitive_volumes = incoming.sensitive_volumes.clone();
     } else {
@@ -377,7 +379,7 @@ fn ingress_routes_from_node(ingress: &IngressNode) -> Vec<ProtoRoute> {
 
     if let Some(default_backend) = &ingress.default_backend {
         routes.push(proto_route_from_ingress_backend(
-            &ingress,
+            ingress,
             None,
             None,
             default_backend.clone(),
@@ -387,7 +389,7 @@ fn ingress_routes_from_node(ingress: &IngressNode) -> Vec<ProtoRoute> {
     for rule in &ingress.rules {
         for path in &rule.paths {
             routes.push(proto_route_from_ingress_backend(
-                &ingress,
+                ingress,
                 rule.host.clone(),
                 Some((path.path.clone(), path.path_type.clone())),
                 path.backend.clone(),
@@ -449,7 +451,8 @@ fn route_key(route: &ProtoRoute) -> String {
         normalized_host.unwrap_or_default(),
         route.path.clone().unwrap_or_default(),
         route.path_type.clone().unwrap_or_default(),
-        route.protocol
+        route
+            .protocol
             .as_deref()
             .map(normalize_protocol)
             .unwrap_or_default(),

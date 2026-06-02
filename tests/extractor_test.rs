@@ -198,7 +198,10 @@ fn test_should_include_runtime_container_filters_pause_sandboxes() {
         "k8s_POD_coredns",
         "rancher/mirrored-pause:3.6"
     ));
-    assert!(should_include_runtime_container("aegis-brain", "python:3.11-slim"));
+    assert!(should_include_runtime_container(
+        "aegis-brain",
+        "python:3.11-slim"
+    ));
 }
 
 #[test]

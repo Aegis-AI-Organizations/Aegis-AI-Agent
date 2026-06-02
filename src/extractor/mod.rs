@@ -383,14 +383,16 @@ fn read_bool_env(primary: &str) -> bool {
 }
 
 fn read_csv_env(primary: &str) -> Option<Vec<String>> {
-    read_env_value(primary).map(|value| {
-        value
-            .split(',')
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(ToOwned::to_owned)
-            .collect::<Vec<_>>()
-    }).filter(|values| !values.is_empty())
+    read_env_value(primary)
+        .map(|value| {
+            value
+                .split(',')
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(ToOwned::to_owned)
+                .collect::<Vec<_>>()
+        })
+        .filter(|values| !values.is_empty())
 }
 
 fn read_env_value(primary: &str) -> Option<String> {

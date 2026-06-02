@@ -3,8 +3,8 @@ use crate::domain::{
     IngressRuleNode, PodNode, PortBindingNode, ProcessNode, ServiceNode, ServicePortNode,
     SystemExtractor, TopologyExtractor,
 };
-use crate::extractor::{looks_sensitive_volume, redact_environment_value};
 use crate::extractor::should_include_k8s_namespace;
+use crate::extractor::{looks_sensitive_volume, redact_environment_value};
 use k8s_openapi::api::core::v1::{Container, Pod, Service, Volume};
 use k8s_openapi::api::networking::v1::{Ingress, IngressBackend, IngressRule};
 use kube::{api::ListParams, Api, Client};
