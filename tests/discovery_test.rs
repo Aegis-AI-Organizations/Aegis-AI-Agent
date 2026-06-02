@@ -2,8 +2,9 @@ use aegis_ai_agent::discovery::{
     build_network_topology, build_network_topology_from_resources, collect_topology, redact_payload,
 };
 use aegis_ai_agent::domain::{
-    ActiveResource, ContainerNode, HostNode, NetworkTopologyPayload, PodNode, PortBindingNode,
-    ProcessNode,
+    ActiveResource, ContainerNode, HostNode, IngressBackendNode, IngressNode, IngressPathNode,
+    IngressRuleNode, NetworkTopologyPayload, PodNode, PortBindingNode, ProcessNode, ServiceNode,
+    ServicePortNode,
 };
 use aegis_ai_agent::extractor::SysinfoExtractor;
 use aegis_ai_agent::redaction::Redactor;
@@ -186,6 +187,116 @@ fn test_build_network_topology_deduplicates_ports_and_routes() {
     assert_eq!(container.ports[0].host_port, Some(3000));
     assert_eq!(payload.routes.len(), 1);
     assert_eq!(payload.routes[0].protocol.as_deref(), Some("tcp"));
+}
+
+#[test]
+fn test_build_network_topology_merges_metadata_and_exports_k8s_routes() {
+    let payload = build_network_topology_from_resources(
+        HostNode {
+            hostname: "host-1".to_string(),
+            os: "Linux".to_string(),
+            kernel: "6.1".to_string(),
+            uptime: 42,
+            total_ram: 1024,
+        },
+        Vec::new(),
+        vec![
+            ActiveResource::Container(ContainerNode {
+                id: "docker://abc123".to_string(),
+                name: "api".to_string(),
+                image: "unknown".to_string(),
+                exposed_ports: vec![PortBindingNode {
+                    number: 8080,
+                    protocol: " TCP ".to_string(),
+                    host_ip: Some("127.0.0.1".to_string()),
+                    host_port: Some(3000),
+                    source: Some("docker_summary".to_string()),
+                }],
+                sensitive_volumes: vec!["/etc/config".to_string()],
+                ..Default::default()
+            }),
+            ActiveResource::Container(ContainerNode {
+                id: "abc123".to_string(),
+                name: "api".to_string(),
+                image: "api:latest".to_string(),
+                image_sha256: Some("sha256:abc".to_string()),
+                env: BTreeMap::from([("API_TOKEN".to_string(), "secret".to_string())]),
+                exposed_ports: vec![PortBindingNode {
+                    number: 8080,
+                    protocol: "tcp".to_string(),
+                    host_ip: Some("127.0.0.1".to_string()),
+                    host_port: Some(3000),
+                    source: Some("docker_port_bindings".to_string()),
+                }],
+                privileged: Some(true),
+                run_as_root: Some(true),
+                sensitive_volumes: vec!["/etc/config".to_string(), "/run/secrets".to_string()],
+                ..Default::default()
+            }),
+            ActiveResource::Service(ServiceNode {
+                name: "api".to_string(),
+                namespace: "default".to_string(),
+                cluster_ip: Some("10.96.0.10".to_string()),
+                ports: vec![ServicePortNode {
+                    port: 80,
+                    protocol: "TCP".to_string(),
+                    node_port: Some(30080),
+                    target_port: Some("http".to_string()),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }),
+            ActiveResource::Ingress(IngressNode {
+                name: "api-ingress".to_string(),
+                namespace: "default".to_string(),
+                default_backend: Some(IngressBackendNode {
+                    service_name: "api".to_string(),
+                    namespace: "default".to_string(),
+                    port_number: Some(80),
+                    ..Default::default()
+                }),
+                rules: vec![IngressRuleNode {
+                    host: Some("api.example.com".to_string()),
+                    paths: vec![IngressPathNode {
+                        path: Some("/v1".to_string()),
+                        path_type: "Prefix".to_string(),
+                        backend: IngressBackendNode {
+                            service_name: "api".to_string(),
+                            namespace: "default".to_string(),
+                            port_name: Some("http".to_string()),
+                            ..Default::default()
+                        },
+                    }],
+                }],
+                ..Default::default()
+            }),
+        ],
+    );
+
+    let container = &payload.hosts[0].containers[0];
+    assert_eq!(container.id, "abc123");
+    assert_eq!(container.image, "api:latest");
+    assert_eq!(container.image_sha256.as_deref(), Some("sha256:abc"));
+    assert_eq!(container.privileged, Some(true));
+    assert_eq!(container.run_as_root, Some(true));
+    assert_eq!(container.sensitive_volumes.len(), 2);
+    assert_eq!(container.exposed_ports.len(), 1);
+    assert_eq!(
+        container.exposed_ports[0].source.as_deref(),
+        Some("docker_port_bindings")
+    );
+    assert_eq!(payload.routes.len(), 4);
+    assert!(payload.routes.iter().any(|route| {
+        route.kind == "k8s_service"
+            && route.host.as_deref() == Some("10.96.0.10")
+            && route.target_port.as_deref() == Some("http")
+    }));
+    assert!(payload.routes.iter().any(|route| {
+        route.kind == "k8s_ingress"
+            && route.host.as_deref() == Some("api.example.com")
+            && route.path.as_deref() == Some("/v1")
+            && route.target_port.as_deref() == Some("http")
+    }));
 }
 
 #[test]
