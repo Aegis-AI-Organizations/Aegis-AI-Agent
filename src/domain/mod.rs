@@ -23,14 +23,39 @@ pub struct ProcessNode {
 }
 
 /// Represents a Docker/Runtime container.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ContainerNode {
     pub id: String,
     pub name: String,
     pub image: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub image_sha256: Option<String>,
     pub state: String,
     /// Environment variables (key-value pairs).
     pub env: BTreeMap<String, String>,
+    /// Exposed container ports or host bindings.
+    pub exposed_ports: Vec<PortBindingNode>,
+    /// Whether the container runs with elevated privileges.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub privileged: Option<bool>,
+    /// Whether the container is configured to run as UID 0.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub run_as_root: Option<bool>,
+    /// Sensitive mounts or volumes that should be tracked in the graph.
+    pub sensitive_volumes: Vec<String>,
+}
+
+/// Represents a port exposure discovered from Docker or Kubernetes.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PortBindingNode {
+    pub number: i32,
+    pub protocol: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub host_ip: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub host_port: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
 }
 
 /// Represents a network connection between pods.
@@ -56,6 +81,72 @@ pub struct PodNode {
     pub connections: Vec<PodConnection>,
 }
 
+/// Represents a Kubernetes Service discovered by the agent.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ServiceNode {
+    pub name: String,
+    pub namespace: String,
+    pub service_type: Option<String>,
+    pub cluster_ip: Option<String>,
+    pub selectors: BTreeMap<String, String>,
+    pub ports: Vec<ServicePortNode>,
+}
+
+/// Represents a service port exposed by a Kubernetes Service.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ServicePortNode {
+    pub port: i32,
+    pub protocol: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub node_port: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_port: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub app_protocol: Option<String>,
+}
+
+/// Represents a Kubernetes Ingress discovered by the agent.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IngressNode {
+    pub name: String,
+    pub namespace: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ingress_class_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default_backend: Option<IngressBackendNode>,
+    pub rules: Vec<IngressRuleNode>,
+}
+
+/// Represents an ingress routing rule.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IngressRuleNode {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
+    pub paths: Vec<IngressPathNode>,
+}
+
+/// Represents a single path -> service backend mapping.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IngressPathNode {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    pub path_type: String,
+    pub backend: IngressBackendNode,
+}
+
+/// Represents a service backend target in an ingress rule.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IngressBackendNode {
+    pub service_name: String,
+    pub namespace: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub port_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub port_number: Option<i32>,
+}
+
 /// Represents the complete system topology at a given time.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TopologyPayload {
@@ -72,6 +163,8 @@ pub struct TopologyPayload {
 #[serde(deny_unknown_fields)]
 pub struct NetworkTopologyPayload {
     pub hosts: Vec<ProtoHost>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub routes: Vec<ProtoRoute>,
 }
 
 /// JSON representation of `aegis.v2.Host`.
@@ -86,14 +179,26 @@ pub struct ProtoHost {
 }
 
 /// JSON representation of `aegis.v2.Container`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ProtoContainer {
     pub id: String,
     pub name: String,
     pub image: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub image_sha256: Option<String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub env: BTreeMap<String, String>,
     pub processes: Vec<ProtoProcess>,
     pub ports: Vec<ProtoPort>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub exposed_ports: Vec<ProtoPort>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub privileged: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub run_as_root: Option<bool>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sensitive_volumes: Vec<String>,
 }
 
 /// JSON representation of `aegis.v2.Process`.
@@ -109,13 +214,50 @@ pub struct ProtoProcess {
 }
 
 /// JSON representation of `aegis.v2.Port`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ProtoPort {
     pub number: i32,
     pub protocol: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub state: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub host_ip: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub host_port: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+}
+
+/// JSON representation of a routing rule to persist into Neo4j.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProtoRoute {
+    pub kind: String,
+    pub source_kind: String,
+    pub source_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_namespace: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_kind: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_namespace: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub protocol: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_port: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_port: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub published_port: Option<i32>,
 }
 
 /// Runtime resource discovered by a topology extractor.
@@ -124,6 +266,8 @@ pub struct ProtoPort {
 pub enum ActiveResource {
     Container(ContainerNode),
     Pod(PodNode),
+    Service(ServiceNode),
+    Ingress(IngressNode),
 }
 
 /// Interface for system data extraction.
@@ -156,7 +300,9 @@ pub trait TopologyExtractor: Send + Sync {
             .into_iter()
             .filter_map(|resource| match resource {
                 ActiveResource::Container(container) => Some(container),
-                ActiveResource::Pod(_) => None,
+                ActiveResource::Pod(_)
+                | ActiveResource::Service(_)
+                | ActiveResource::Ingress(_) => None,
             })
             .collect())
     }
@@ -169,7 +315,9 @@ pub trait TopologyExtractor: Send + Sync {
             .into_iter()
             .filter_map(|resource| match resource {
                 ActiveResource::Pod(pod) => Some(pod),
-                ActiveResource::Container(_) => None,
+                ActiveResource::Container(_)
+                | ActiveResource::Service(_)
+                | ActiveResource::Ingress(_) => None,
             })
             .collect())
     }

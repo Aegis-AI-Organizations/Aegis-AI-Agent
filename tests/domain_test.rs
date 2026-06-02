@@ -44,12 +44,13 @@ fn test_network_topology_payload_serialization() {
                 id: "container-1".to_string(),
                 name: "api".to_string(),
                 image: "api:latest".to_string(),
-                processes: Vec::new(),
                 ports: vec![ProtoPort {
                     number: 8080,
                     protocol: "tcp".to_string(),
                     state: Some("LISTEN".to_string()),
+                    ..Default::default()
                 }],
+                ..Default::default()
             }],
             processes: vec![ProtoProcess {
                 pid: 1234,
@@ -58,6 +59,7 @@ fn test_network_topology_payload_serialization() {
                 user: Some("aegis".to_string()),
             }],
         }],
+        routes: Vec::new(),
     };
 
     let json = serde_json::to_string(&payload).unwrap();
@@ -77,6 +79,7 @@ fn test_active_resource_serialization() {
         image: "api:latest".to_string(),
         state: "running".to_string(),
         env: Default::default(),
+        ..Default::default()
     });
 
     let json = serde_json::to_string(&resource).unwrap();

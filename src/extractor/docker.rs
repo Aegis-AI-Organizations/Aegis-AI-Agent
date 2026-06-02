@@ -1,6 +1,10 @@
 use crate::domain::{
-    ActiveResource, ContainerNode, HostNode, PodNode, ProcessNode, SystemExtractor,
-    TopologyExtractor,
+    ActiveResource, ContainerNode, HostNode, PodNode, PortBindingNode, ProcessNode,
+    SystemExtractor, TopologyExtractor,
+};
+use crate::extractor::{
+    is_root_user, looks_sensitive_volume, parse_port_key, redact_environment_value,
+    should_include_runtime_container,
 };
 use bollard::container::ListContainersOptions;
 use bollard::Docker;
@@ -133,7 +137,10 @@ impl SystemExtractor for DockerExtractor {
 
         let mut nodes = Vec::new();
         for c in containers {
-            nodes.push(map_container_to_node(c, None));
+            let node = map_container_to_node(c, None);
+            if should_include_runtime_container(&node.name, &node.image) {
+                nodes.push(node);
+            }
         }
 
         // Second pass: enrich with detailed info if possible
@@ -160,10 +167,21 @@ impl TopologyExtractor for DockerExtractor {
             .await
             .map_err(|e| anyhow::anyhow!("Failed to list active Docker containers: {}", e))?;
 
-        Ok(containers
-            .into_iter()
-            .map(|container| ActiveResource::Container(map_container_to_node(container, None)))
-            .collect())
+        let mut nodes = Vec::new();
+        for c in containers {
+            let node = map_container_to_node(c, None);
+            if should_include_runtime_container(&node.name, &node.image) {
+                nodes.push(node);
+            }
+        }
+
+        for node in &mut nodes {
+            if let Ok(inspect) = self.docker.inspect_container(&node.id, None).await {
+                enrich_node_with_inspect(node, inspect);
+            }
+        }
+
+        Ok(nodes.into_iter().map(ActiveResource::Container).collect())
     }
 }
 
@@ -182,6 +200,7 @@ pub fn map_container_to_node(
     let name = normalize_container_name(&raw_name);
     let image = c.image.unwrap_or_else(|| "unknown".to_string());
     let state = c.state.unwrap_or_else(|| "unknown".to_string());
+    let image_sha256 = c.image_id;
 
     let mut env = BTreeMap::new();
     if let Some(labels) = c.labels {
@@ -190,12 +209,34 @@ pub fn map_container_to_node(
         }
     }
 
+    let mut exposed_ports = Vec::new();
+    if let Some(ports) = c.ports {
+        for port in ports {
+            exposed_ports.push(PortBindingNode {
+                number: port.private_port as i32,
+                protocol: port
+                    .typ
+                    .as_ref()
+                    .map(|value| value.as_ref().to_string())
+                    .unwrap_or_else(|| "tcp".to_string()),
+                host_ip: port.ip,
+                host_port: port.public_port.map(|value| value as i32),
+                source: Some("docker_summary".to_string()),
+            });
+        }
+    }
+
     let mut node = ContainerNode {
         id,
         name,
         image,
+        image_sha256,
         state,
         env,
+        exposed_ports,
+        privileged: None,
+        run_as_root: None,
+        sensitive_volumes: Vec::new(),
     };
 
     if let Some(ins) = inspect {
@@ -215,15 +256,83 @@ pub fn enrich_node_with_inspect(
                 let parts: Vec<&str> = e.splitn(2, '=').collect();
                 if parts.len() == 2 {
                     let key = parts[0].to_string();
-                    let val = if is_sensitive_key(&key) {
-                        "<redacted>".to_string()
-                    } else {
-                        parts[1].to_string()
-                    };
-                    node.env.insert(key, val);
+                    node.env
+                        .insert(key.clone(), redact_environment_value(parts[1]));
+                }
+            }
+
+            node.run_as_root = is_root_user(config.user.as_deref());
+            if let Some(image) = config.image {
+                node.image = image;
+            }
+
+            if let Some(exposed_ports) = config.exposed_ports {
+                for (port_key, _) in exposed_ports {
+                    if let Some((number, protocol)) = parse_port_key(&port_key) {
+                        node.exposed_ports.push(PortBindingNode {
+                            number,
+                            protocol,
+                            host_ip: None,
+                            host_port: None,
+                            source: Some("docker_exposed_ports".to_string()),
+                        });
+                    }
                 }
             }
         }
+    }
+
+    if let Some(host_config) = inspect.host_config {
+        node.privileged = host_config.privileged;
+
+        if let Some(port_bindings) = host_config.port_bindings {
+            for (port_key, bindings) in port_bindings {
+                if let Some((number, protocol)) = parse_port_key(&port_key) {
+                    if let Some(bindings) = bindings {
+                        for binding in bindings {
+                            let host_port = binding
+                                .host_port
+                                .as_deref()
+                                .and_then(|value| value.parse::<i32>().ok());
+                            node.exposed_ports.push(PortBindingNode {
+                                number,
+                                protocol: protocol.clone(),
+                                host_ip: binding.host_ip,
+                                host_port,
+                                source: Some("docker_port_bindings".to_string()),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        if let Some(mounts) = host_config.mounts {
+            for mount in mounts {
+                let destination = mount.target.unwrap_or_default();
+                let source = mount.source.unwrap_or_default();
+                if looks_sensitive_volume(&destination) || looks_sensitive_volume(&source) {
+                    node.sensitive_volumes
+                        .push(format!("{}:{}", source, destination));
+                }
+            }
+        }
+
+        if let Some(binds) = host_config.binds {
+            for bind in binds {
+                let mut parts = bind.split(':');
+                let source = parts.next().unwrap_or_default().to_string();
+                let destination = parts.next().unwrap_or_default().to_string();
+                if looks_sensitive_volume(&destination) || looks_sensitive_volume(&source) {
+                    node.sensitive_volumes
+                        .push(format!("{}:{}", source, destination));
+                }
+            }
+        }
+    }
+
+    if node.image_sha256.is_none() {
+        node.image_sha256 = inspect.image;
     }
 }
 

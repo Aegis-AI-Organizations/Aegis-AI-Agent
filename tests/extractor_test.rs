@@ -1,5 +1,6 @@
 use aegis_ai_agent::extractor::{
-    docker, filter_host_processes, k8s, ActiveResource, ContainerNode, PodNode, ProcessNode,
+    docker, filter_host_processes, k8s, should_include_k8s_namespace,
+    should_include_runtime_container, ActiveResource, ContainerNode, PodNode, ProcessNode,
     SysinfoExtractor, SystemExtractor, TopologyExtractor,
 };
 use k8s_openapi::api::core::v1::{Container, Pod, PodSpec, PodStatus};
@@ -17,8 +18,13 @@ impl TopologyExtractor for FakeTopologyExtractor {
                 id: "container-1".to_string(),
                 name: "api".to_string(),
                 image: "api:latest".to_string(),
+                image_sha256: None,
                 state: "running".to_string(),
                 env: BTreeMap::new(),
+                exposed_ports: Vec::new(),
+                privileged: None,
+                run_as_root: None,
+                sensitive_volumes: Vec::new(),
             }),
             ActiveResource::Pod(PodNode {
                 name: "api-pod".to_string(),
@@ -187,6 +193,23 @@ fn test_is_sensitive_key() {
 }
 
 #[test]
+fn test_should_include_runtime_container_filters_pause_sandboxes() {
+    assert!(!should_include_runtime_container(
+        "k8s_POD_coredns",
+        "rancher/mirrored-pause:3.6"
+    ));
+    assert!(should_include_runtime_container("aegis-brain", "python:3.11-slim"));
+}
+
+#[test]
+fn test_should_include_k8s_namespace_filters_system_namespaces() {
+    assert!(!should_include_k8s_namespace("kube-system"));
+    assert!(!should_include_k8s_namespace("cert-manager"));
+    assert!(should_include_k8s_namespace("default"));
+    assert!(should_include_k8s_namespace("production"));
+}
+
+#[test]
 fn test_map_container_to_node_basic() {
     let summary = bollard::models::ContainerSummary {
         id: Some("1234567890abcdef".to_string()),
@@ -211,8 +234,13 @@ fn test_enrich_node_with_inspect() {
         id: "123".to_string(),
         name: "test".to_string(),
         image: "img".to_string(),
+        image_sha256: None,
         state: "stat".to_string(),
         env: BTreeMap::new(),
+        exposed_ports: Vec::new(),
+        privileged: None,
+        run_as_root: None,
+        sensitive_volumes: Vec::new(),
     };
 
     let inspect = bollard::models::ContainerInspectResponse {
@@ -227,8 +255,8 @@ fn test_enrich_node_with_inspect() {
     };
 
     docker::enrich_node_with_inspect(&mut node, inspect);
-    assert_eq!(node.env.get("DB_USER").unwrap(), "admin");
-    assert_eq!(node.env.get("DB_PASS").unwrap(), "<redacted>");
+    assert_eq!(node.env.get("DB_USER").unwrap(), "REDACTED");
+    assert_eq!(node.env.get("DB_PASS").unwrap(), "REDACTED");
 }
 
 #[test]
@@ -283,7 +311,7 @@ fn test_map_pod_to_node_redaction() {
 
     let node = k8s::map_pod_to_node(pod);
     let env = &node.containers[0].env;
-    assert_eq!(env.get("SECRET_KEY").unwrap(), "<redacted>");
+    assert_eq!(env.get("SECRET_KEY").unwrap(), "REDACTED");
 }
 
 #[test]

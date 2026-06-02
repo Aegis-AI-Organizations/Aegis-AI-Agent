@@ -7,10 +7,12 @@ pub use crate::domain::{
     ActiveResource, ContainerNode, HostNode, PodNode, ProcessNode, SystemExtractor,
     TopologyExtractor,
 };
+use crate::redaction::Redactor;
 #[cfg(feature = "docker")]
 pub use docker::DockerExtractor;
 #[cfg(feature = "k8s")]
 pub use k8s::K8sExtractor;
+use std::sync::OnceLock;
 use std::sync::{Arc, Mutex};
 use sysinfo::{ProcessesToUpdate, System};
 
@@ -247,4 +249,150 @@ fn is_explicitly_ignored_host_process(name: &str) -> bool {
                 | "docker desktop helper"
                 | "docker desktop helper (gpu)"
         )
+}
+
+static ENV_REDACTOR: OnceLock<Redactor> = OnceLock::new();
+
+pub fn redact_environment_value(value: &str) -> String {
+    let redacted = ENV_REDACTOR.get_or_init(Redactor::new).redact(value);
+    if redacted == value {
+        "REDACTED".to_string()
+    } else {
+        redacted
+    }
+}
+
+pub fn parse_port_key(value: &str) -> Option<(i32, String)> {
+    let (port, protocol) = value.split_once('/').unwrap_or((value, "tcp"));
+    let number = port.parse::<i32>().ok()?;
+    Some((number, protocol.to_lowercase()))
+}
+
+pub fn looks_sensitive_volume(path: &str) -> bool {
+    let lower = path.to_lowercase();
+    [
+        "docker.sock",
+        "/var/run/secrets",
+        "/run/secrets",
+        "/etc",
+        "/root",
+        "/home/",
+        ".kube",
+        ".aws",
+        "id_rsa",
+        "id_ed25519",
+    ]
+    .iter()
+    .any(|pattern| lower.contains(pattern))
+}
+
+pub fn is_root_user(user: Option<&str>) -> Option<bool> {
+    user.map(|value| {
+        let normalized = value.trim().to_lowercase();
+        normalized == "0" || normalized == "root" || normalized.starts_with("0:")
+    })
+}
+
+pub fn should_include_runtime_container(name: &str, image: &str) -> bool {
+    if read_bool_env("TOPOLOGY_INCLUDE_ALL_RUNTIME_CONTAINERS") {
+        return true;
+    }
+
+    let normalized_name = name.to_lowercase();
+    let normalized_image = image.to_lowercase();
+
+    if let Some(allowlist) = read_csv_env("TOPOLOGY_CONTAINER_ALLOWLIST") {
+        let allowed = allowlist
+            .iter()
+            .map(|value| value.to_lowercase())
+            .any(|token| normalized_name.contains(&token) || normalized_image.contains(&token));
+        return allowed;
+    }
+
+    if normalized_name.starts_with("k8s_pod_") {
+        return false;
+    }
+
+    if (normalized_name.starts_with("k8s_") && normalized_name.contains("_kube-system_"))
+        || normalized_name.contains("_cert-manager_")
+        || normalized_name.contains("_cilium_")
+        || normalized_name.contains("_local-path-provisioner_")
+        || normalized_name.contains("_ingress-nginx_")
+        || normalized_name.contains("_traefik_")
+    {
+        return false;
+    }
+
+    if normalized_image.contains("pause") || normalized_image.contains("sandbox") {
+        return false;
+    }
+
+    if normalized_name.contains("cert-manager")
+        || normalized_name.contains("cilium")
+        || normalized_name.contains("local-path-provisioner")
+    {
+        return false;
+    }
+
+    true
+}
+
+pub fn should_include_k8s_namespace(namespace: &str) -> bool {
+    if read_bool_env("TOPOLOGY_INCLUDE_SYSTEM_K8S") {
+        return true;
+    }
+
+    let namespace = namespace.trim();
+    if namespace.is_empty() {
+        return true;
+    }
+
+    if let Some(allowlist) = read_csv_env("TOPOLOGY_K8S_NAMESPACE_ALLOWLIST") {
+        return allowlist.iter().any(|value| value == namespace);
+    }
+
+    !matches!(
+        namespace,
+        "kube-system"
+            | "kube-public"
+            | "kube-node-lease"
+            | "cert-manager"
+            | "cilium"
+            | "istio-system"
+            | "linkerd"
+            | "local-path-provisioner"
+            | "ingress-nginx"
+            | "traefik"
+            | "longhorn-system"
+            | "rook-ceph"
+            | "monitoring"
+            | "metrics"
+            | "kyverno"
+            | "gatekeeper-system"
+            | "argocd"
+            | "velero"
+    ) && !namespace.starts_with("kube-")
+        && !namespace.starts_with("cilium")
+        && !namespace.starts_with("cert-manager")
+}
+
+fn read_bool_env(primary: &str) -> bool {
+    read_env_value(primary)
+        .map(|value| matches!(value.as_str(), "1" | "true" | "TRUE" | "yes" | "YES"))
+        .unwrap_or(false)
+}
+
+fn read_csv_env(primary: &str) -> Option<Vec<String>> {
+    read_env_value(primary).map(|value| {
+        value
+            .split(',')
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned)
+            .collect::<Vec<_>>()
+    }).filter(|values| !values.is_empty())
+}
+
+fn read_env_value(primary: &str) -> Option<String> {
+    std::env::var(primary).ok()
 }

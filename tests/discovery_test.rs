@@ -2,7 +2,8 @@ use aegis_ai_agent::discovery::{
     build_network_topology, build_network_topology_from_resources, collect_topology, redact_payload,
 };
 use aegis_ai_agent::domain::{
-    ActiveResource, ContainerNode, HostNode, NetworkTopologyPayload, PodNode, ProcessNode,
+    ActiveResource, ContainerNode, HostNode, NetworkTopologyPayload, PodNode, PortBindingNode,
+    ProcessNode,
 };
 use aegis_ai_agent::extractor::SysinfoExtractor;
 use aegis_ai_agent::redaction::Redactor;
@@ -48,6 +49,7 @@ fn test_redact_payload() {
                 env.insert("AWS_KEY".to_string(), "AKIA1234567890ABCDEF".to_string());
                 env
             },
+            ..Default::default()
         }],
         Vec::new(),
     );
@@ -86,6 +88,7 @@ fn test_build_network_topology_merges_docker_and_k8s_without_duplicates() {
                 image: "api:latest".to_string(),
                 state: "running".to_string(),
                 env: BTreeMap::new(),
+                ..Default::default()
             },
             ContainerNode {
                 id: "standalone".to_string(),
@@ -93,6 +96,7 @@ fn test_build_network_topology_merges_docker_and_k8s_without_duplicates() {
                 image: "worker:latest".to_string(),
                 state: "running".to_string(),
                 env: BTreeMap::new(),
+                ..Default::default()
             },
         ],
         vec![PodNode {
@@ -106,6 +110,7 @@ fn test_build_network_topology_merges_docker_and_k8s_without_duplicates() {
                 image: "api:latest".to_string(),
                 state: "running".to_string(),
                 env: BTreeMap::new(),
+                ..Default::default()
             }],
             connections: Vec::new(),
         }],
@@ -123,6 +128,64 @@ fn test_build_network_topology_merges_docker_and_k8s_without_duplicates() {
         .containers
         .iter()
         .any(|container| container.id == "standalone"));
+}
+
+#[test]
+fn test_build_network_topology_deduplicates_ports_and_routes() {
+    let payload = build_network_topology_from_resources(
+        HostNode {
+            hostname: "host-1".to_string(),
+            os: "Linux".to_string(),
+            kernel: "6.1".to_string(),
+            uptime: 42,
+            total_ram: 1024,
+        },
+        vec![ProcessNode {
+            pid: 42,
+            name: "agent".to_string(),
+            user: "aegis".to_string(),
+            args: Some(vec!["--scan".to_string()]),
+        }],
+        vec![ActiveResource::Container(ContainerNode {
+            id: "abc123".to_string(),
+            name: "api".to_string(),
+            image: "api:latest".to_string(),
+            state: "running".to_string(),
+            env: BTreeMap::new(),
+            exposed_ports: vec![
+                PortBindingNode {
+                    number: 8080,
+                    protocol: "TCP".to_string(),
+                    host_ip: Some("0.0.0.0".to_string()),
+                    host_port: Some(3000),
+                    source: Some("docker_summary".to_string()),
+                },
+                PortBindingNode {
+                    number: 8080,
+                    protocol: "tcp".to_string(),
+                    host_ip: Some("::".to_string()),
+                    host_port: Some(3000),
+                    source: Some("docker_port_bindings".to_string()),
+                },
+                PortBindingNode {
+                    number: 8080,
+                    protocol: "TCP".to_string(),
+                    host_ip: None,
+                    host_port: None,
+                    source: Some("docker_exposed_ports".to_string()),
+                },
+            ],
+            ..Default::default()
+        })],
+    );
+
+    let container = &payload.hosts[0].containers[0];
+    assert_eq!(container.exposed_ports.len(), 2);
+    assert_eq!(container.ports.len(), 1);
+    assert_eq!(container.ports[0].protocol, "tcp");
+    assert_eq!(container.ports[0].host_port, Some(3000));
+    assert_eq!(payload.routes.len(), 1);
+    assert_eq!(payload.routes[0].protocol.as_deref(), Some("tcp"));
 }
 
 #[test]
@@ -148,6 +211,7 @@ fn test_build_network_topology_from_resources_assembles_single_payload() {
                 image: "api:latest".to_string(),
                 state: "running".to_string(),
                 env: BTreeMap::new(),
+                ..Default::default()
             }),
             ActiveResource::Pod(PodNode {
                 name: "api-pod".to_string(),
@@ -161,6 +225,7 @@ fn test_build_network_topology_from_resources_assembles_single_payload() {
                         image: "api:latest".to_string(),
                         state: "running".to_string(),
                         env: BTreeMap::new(),
+                        ..Default::default()
                     },
                     ContainerNode {
                         id: "pod-only".to_string(),
@@ -168,6 +233,7 @@ fn test_build_network_topology_from_resources_assembles_single_payload() {
                         image: "sidecar:latest".to_string(),
                         state: "running".to_string(),
                         env: BTreeMap::new(),
+                        ..Default::default()
                     },
                 ],
                 connections: Vec::new(),
@@ -209,6 +275,7 @@ fn test_network_topology_json_matches_protobuf_contract() {
             image: "api:latest".to_string(),
             state: "running".to_string(),
             env: BTreeMap::new(),
+            ..Default::default()
         }],
         Vec::new(),
     );
