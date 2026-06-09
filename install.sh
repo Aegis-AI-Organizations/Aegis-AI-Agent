@@ -32,7 +32,7 @@ if [ ! -f "$CONFIG_DIR/agent.env" ]; then
     echo "Creating environment template at $CONFIG_DIR/agent.env"
     cat <<EOF > "$CONFIG_DIR/agent.env"
 # Aegis AI Agent Configuration
-GATEWAY_URL=https://api.aegis.ai
+GATEWAY_URL=https://api.aegis-ai.fr
 DEPLOYMENT_TOKEN=ag_<43+_URL_SAFE_CHARS>
 INGEST_HOST=localhost
 INGEST_PORT=7233
