@@ -50,7 +50,26 @@ fn docker_home_dir() -> Option<PathBuf> {
 }
 
 fn docker_runtime_dir() -> Option<PathBuf> {
-    std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from)
+    std::env::var_os("XDG_RUNTIME_DIR")
+        .map(PathBuf::from)
+        .or_else(current_user_runtime_dir)
+}
+
+#[cfg(target_os = "linux")]
+fn current_user_runtime_dir() -> Option<PathBuf> {
+    current_uid().map(|uid| PathBuf::from(format!("/run/user/{}", uid)))
+}
+
+#[cfg(not(target_os = "linux"))]
+fn current_user_runtime_dir() -> Option<PathBuf> {
+    None
+}
+
+#[cfg(target_os = "linux")]
+fn current_uid() -> Option<u32> {
+    let status = fs::read_to_string("/proc/self/status").ok()?;
+    let uid_line = status.lines().find(|line| line.starts_with("Uid:"))?;
+    uid_line.split_whitespace().nth(1)?.parse::<u32>().ok()
 }
 
 fn read_current_docker_context(home_dir: Option<&Path>) -> Option<String> {
@@ -192,6 +211,32 @@ impl TopologyExtractor for DockerExtractor {
         }
 
         Ok(nodes.into_iter().map(ActiveResource::Container).collect())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::current_user_runtime_dir;
+
+    #[test]
+    fn test_current_user_runtime_dir_uses_current_uid_on_linux() {
+        let runtime_dir = current_user_runtime_dir();
+
+        #[cfg(target_os = "linux")]
+        {
+            use super::current_uid;
+
+            let uid = current_uid().expect("expected to read current uid on linux");
+            assert_eq!(
+                runtime_dir.as_deref().map(|path| path.to_string_lossy().to_string()),
+                Some(format!("/run/user/{}", uid))
+            );
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        {
+            assert!(runtime_dir.is_none());
+        }
     }
 }
 
