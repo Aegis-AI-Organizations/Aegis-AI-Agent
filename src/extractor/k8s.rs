@@ -9,6 +9,7 @@ use k8s_openapi::api::core::v1::{Container, Pod, Service, Volume};
 use k8s_openapi::api::networking::v1::{Ingress, IngressBackend, IngressRule};
 use kube::{api::ListParams, Api, Client};
 use std::collections::BTreeMap;
+use std::env;
 
 /// SystemExtractor implementation using the `kube-rs` crate to query Kubernetes API.
 pub struct K8sExtractor {
@@ -16,11 +17,26 @@ pub struct K8sExtractor {
 }
 
 impl K8sExtractor {
-    /// Attempts to initialize the K8s client using in-cluster config or local kubeconfig.
+    /// Attempts to initialize the K8s client using in-cluster config or an explicit kubeconfig.
     pub async fn new() -> anyhow::Result<Self> {
+        if !should_attempt_kubeclient_autodiscovery() {
+            anyhow::bail!(
+                "Kubernetes discovery is disabled outside a Kubernetes pod; set KUBECONFIG to enable local kubeconfig access"
+            );
+        }
+
         let client = Client::try_default().await?;
         Ok(Self { client })
     }
+}
+
+fn should_attempt_kubeclient_autodiscovery() -> bool {
+    if env::var_os("KUBECONFIG").is_some() {
+        return true;
+    }
+
+    env::var_os("KUBERNETES_SERVICE_HOST").is_some()
+        && env::var_os("KUBERNETES_SERVICE_PORT").is_some()
 }
 
 impl SystemExtractor for K8sExtractor {
@@ -100,6 +116,16 @@ impl TopologyExtractor for K8sExtractor {
                     .map(ActiveResource::Ingress),
             )
             .collect())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::should_attempt_kubeclient_autodiscovery;
+
+    #[test]
+    fn kubeclient_autodiscovery_is_disabled_without_explicit_env() {
+        assert!(!should_attempt_kubeclient_autodiscovery());
     }
 }
 
