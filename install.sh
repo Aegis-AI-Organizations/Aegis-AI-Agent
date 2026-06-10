@@ -17,6 +17,13 @@ if ! id "$AGENT_USER" &>/dev/null; then
     useradd --system --shell /usr/sbin/nologin --no-create-home "$AGENT_USER"
 fi
 
+# Grant Docker socket access on hosts that expose a local docker group.
+DOCKER_SUPPLEMENTARY_GROUPS=""
+if getent group docker >/dev/null 2>&1; then
+    usermod -aG docker "$AGENT_USER" || true
+    DOCKER_SUPPLEMENTARY_GROUPS="SupplementaryGroups=docker"
+fi
+
 # Move binary (assuming it's in the current directory)
 if [ -f "$BINARY_NAME" ]; then
     cp "$BINARY_NAME" "$INSTALL_DIR/"
@@ -66,6 +73,7 @@ EnvironmentFile=$CONFIG_DIR/agent.env
 ExecStart=$INSTALL_DIR/$BINARY_NAME
 Restart=always
 RestartSec=10
+${DOCKER_SUPPLEMENTARY_GROUPS}
 
 # Security hardening
 NoNewPrivileges=true
