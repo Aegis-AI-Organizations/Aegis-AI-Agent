@@ -33,6 +33,7 @@ fn connect_to_docker_socket() -> Result<Docker, bollard::errors::Error> {
     for candidate in docker_socket_candidates(
         std::env::var("DOCKER_HOST").ok().as_deref(),
         docker_home_dir().as_deref(),
+        docker_runtime_dir().as_deref(),
         read_current_docker_context(docker_home_dir().as_deref()).as_deref(),
     ) {
         match Docker::connect_with_unix(&candidate, 120, API_DEFAULT_VERSION) {
@@ -48,6 +49,10 @@ fn docker_home_dir() -> Option<PathBuf> {
     std::env::var_os("HOME").map(PathBuf::from)
 }
 
+fn docker_runtime_dir() -> Option<PathBuf> {
+    std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from)
+}
+
 fn read_current_docker_context(home_dir: Option<&Path>) -> Option<String> {
     let config_path = home_dir?.join(".docker/config.json");
     let config = fs::read_to_string(config_path).ok()?;
@@ -61,6 +66,7 @@ fn read_current_docker_context(home_dir: Option<&Path>) -> Option<String> {
 pub fn docker_socket_candidates(
     docker_host: Option<&str>,
     home_dir: Option<&Path>,
+    runtime_dir: Option<&Path>,
     current_context: Option<&str>,
 ) -> Vec<String> {
     let mut candidates = Vec::new();
@@ -96,6 +102,10 @@ pub fn docker_socket_candidates(
             "unix://{}",
             home.join(".docker/run/docker.sock").display()
         ));
+    }
+
+    if let Some(runtime) = runtime_dir {
+        candidates.push(format!("unix://{}", runtime.join("docker.sock").display()));
     }
 
     candidates.push("unix:///var/run/docker.sock".to_string());

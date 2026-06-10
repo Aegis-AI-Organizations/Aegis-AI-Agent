@@ -110,7 +110,7 @@ fn test_normalize_container_name() {
 #[test]
 fn test_docker_socket_candidates_prioritize_current_context() {
     let home = std::path::Path::new("/Users/tester");
-    let candidates = docker::docker_socket_candidates(None, Some(home), Some("orbstack"));
+    let candidates = docker::docker_socket_candidates(None, Some(home), None, Some("orbstack"));
 
     assert_eq!(
         candidates.first().map(String::as_str),
@@ -124,6 +124,7 @@ fn test_docker_socket_candidates_honor_docker_host_override() {
     let candidates = docker::docker_socket_candidates(
         Some("unix:///tmp/custom-docker.sock"),
         Some(std::path::Path::new("/Users/tester")),
+        None,
         Some("desktop-linux"),
     );
 
@@ -131,6 +132,19 @@ fn test_docker_socket_candidates_honor_docker_host_override() {
         candidates.first().map(String::as_str),
         Some("unix:///tmp/custom-docker.sock")
     );
+}
+
+#[test]
+fn test_docker_socket_candidates_include_rootless_runtime_socket() {
+    let candidates = docker::docker_socket_candidates(
+        None,
+        None,
+        Some(std::path::Path::new("/run/user/1000")),
+        None,
+    );
+
+    assert!(candidates.contains(&"unix:///run/user/1000/docker.sock".to_string()));
+    assert!(candidates.contains(&"unix:///var/run/docker.sock".to_string()));
 }
 
 #[test]
