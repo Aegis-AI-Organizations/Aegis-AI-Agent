@@ -65,6 +65,8 @@ jobs:
         with:
           context: .
           push: true
+          provenance: false
+          sbom: false
           tags: |
             ${{ steps.prep.outputs.image_name }}:${{ steps.tag_gen.outputs.tag }}
             ${{ steps.prep.outputs.image_name }}:latest
