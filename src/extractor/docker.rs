@@ -228,7 +228,9 @@ mod tests {
 
             let uid = current_uid().expect("expected to read current uid on linux");
             assert_eq!(
-                runtime_dir.as_deref().map(|path| path.to_string_lossy().to_string()),
+                runtime_dir
+                    .as_deref()
+                    .map(|path| path.to_string_lossy().to_string()),
                 Some(format!("/run/user/{}", uid))
             );
         }
