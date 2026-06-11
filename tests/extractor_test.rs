@@ -1,8 +1,8 @@
 use aegis_ai_agent::extractor::{
     docker, filter_host_processes, is_root_user, k8s, looks_sensitive_volume, parse_port_key,
-    redact_environment_value, should_include_k8s_namespace, should_include_runtime_container,
-    ActiveResource, ContainerNode, PodNode, ProcessNode, SysinfoExtractor, SystemExtractor,
-    TopologyExtractor,
+    redact_environment_entry, redact_environment_value, should_include_k8s_namespace,
+    should_include_runtime_container, ActiveResource, ContainerNode, PodNode, ProcessNode,
+    SysinfoExtractor, SystemExtractor, TopologyExtractor,
 };
 use k8s_openapi::api::core::v1::{
     Container, ContainerPort, HostPathVolumeSource, Pod, PodSecurityContext, PodSpec, PodStatus,
@@ -247,7 +247,19 @@ fn test_extractor_helpers_parse_ports_users_and_sensitive_values() {
     assert_eq!(is_root_user(Some("0:0")), Some(true));
     assert_eq!(is_root_user(Some("1000")), Some(false));
     assert_eq!(is_root_user(None), None);
-    assert_eq!(redact_environment_value("plain-value"), "REDACTED");
+    assert_eq!(redact_environment_value("plain-value"), "plain-value");
+    assert_eq!(
+        redact_environment_entry("DB_PASS", Some("secret123")),
+        "aegis-mock-secret"
+    );
+    assert_eq!(
+        redact_environment_entry("POSTGRES_PASSWORD", Some("secret456")),
+        "aegis-mock-secret"
+    );
+    assert_eq!(
+        redact_environment_entry("DB_HOST", Some("postgres")),
+        "postgres"
+    );
 }
 
 #[test]
@@ -318,8 +330,8 @@ fn test_enrich_node_with_inspect() {
     };
 
     docker::enrich_node_with_inspect(&mut node, inspect);
-    assert_eq!(node.env.get("DB_USER").unwrap(), "REDACTED");
-    assert_eq!(node.env.get("DB_PASS").unwrap(), "REDACTED");
+    assert_eq!(node.env.get("DB_USER").unwrap(), "admin");
+    assert_eq!(node.env.get("DB_PASS").unwrap(), "aegis-mock-secret");
 }
 
 #[test]
@@ -420,7 +432,7 @@ fn test_map_pod_to_node_redaction() {
 
     let node = k8s::map_pod_to_node(pod);
     let env = &node.containers[0].env;
-    assert_eq!(env.get("SECRET_KEY").unwrap(), "REDACTED");
+    assert_eq!(env.get("SECRET_KEY").unwrap(), "aegis-mock-secret");
 }
 
 #[test]

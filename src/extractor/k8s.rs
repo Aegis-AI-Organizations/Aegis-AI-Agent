@@ -4,7 +4,7 @@ use crate::domain::{
     SystemExtractor, TopologyExtractor,
 };
 use crate::extractor::should_include_k8s_namespace;
-use crate::extractor::{looks_sensitive_volume, redact_environment_value};
+use crate::extractor::{looks_sensitive_volume, redact_environment_entry};
 use k8s_openapi::api::core::v1::{Container, Pod, Service, Volume};
 use k8s_openapi::api::networking::v1::{Ingress, IngressBackend, IngressRule};
 use kube::{api::ListParams, Api, Client};
@@ -313,11 +313,7 @@ fn map_pod_container(
     let mut env_map = BTreeMap::new();
     if let Some(envs) = &c.env {
         for e in envs {
-            let value = if let Some(value) = &e.value {
-                redact_environment_value(value)
-            } else {
-                "REDACTED".to_string()
-            };
+            let value = redact_environment_entry(&e.name, e.value.as_deref());
             env_map.insert(e.name.clone(), value);
         }
     }

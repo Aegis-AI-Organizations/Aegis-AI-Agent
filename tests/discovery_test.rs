@@ -64,6 +64,10 @@ fn test_redact_payload() {
         .as_ref()
         .unwrap()
         .contains("<REDACTED_SECRET>"));
+    assert_eq!(
+        host.containers[0].env.get("AWS_KEY").unwrap(),
+        "AKIA0000000000000000"
+    );
 }
 
 #[test]

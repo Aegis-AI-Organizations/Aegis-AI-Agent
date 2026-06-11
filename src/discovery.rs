@@ -5,7 +5,9 @@ use crate::domain::{
     NetworkTopologyPayload, PodNode, PortBindingNode, ProtoContainer, ProtoHost, ProtoPort,
     ProtoProcess, ProtoRoute, ServiceNode, SystemExtractor,
 };
-use crate::extractor::{SysinfoExtractor, TopologyExtractor};
+use crate::extractor::{
+    redact_environment_value_with_redactor, SysinfoExtractor, TopologyExtractor,
+};
 use crate::redaction::Redactor;
 use anyhow::Result;
 use std::collections::BTreeMap;
@@ -216,8 +218,8 @@ pub fn redact_payload(payload: &mut NetworkTopologyPayload, redactor: &Redactor)
         }
 
         for container in &mut host.containers {
-            for value in container.env.values_mut() {
-                *value = redact_env_value(value.as_str(), redactor);
+            for (key, value) in container.env.iter_mut() {
+                *value = redact_env_value(key, value.as_str(), redactor);
             }
             for proc in &mut container.processes {
                 proc.name = redactor.redact(&proc.name);
@@ -608,13 +610,8 @@ impl ProtoPortKey {
     }
 }
 
-fn redact_env_value(value: &str, redactor: &Redactor) -> String {
-    let redacted = redactor.redact(value);
-    if redacted == value {
-        "REDACTED".to_string()
-    } else {
-        redacted
-    }
+fn redact_env_value(key: &str, value: &str, redactor: &Redactor) -> String {
+    redact_environment_value_with_redactor(key, value, redactor)
 }
 
 fn proto_process_from_node(process: crate::domain::ProcessNode) -> ProtoProcess {

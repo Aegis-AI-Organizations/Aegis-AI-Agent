@@ -3,7 +3,7 @@ use crate::domain::{
     SystemExtractor, TopologyExtractor,
 };
 use crate::extractor::{
-    is_root_user, looks_sensitive_volume, parse_port_key, redact_environment_value,
+    is_root_user, looks_sensitive_volume, parse_port_key, redact_environment_entry,
     should_include_runtime_container,
 };
 use bollard::container::ListContainersOptions;
@@ -314,7 +314,7 @@ pub fn enrich_node_with_inspect(
                 if parts.len() == 2 {
                     let key = parts[0].to_string();
                     node.env
-                        .insert(key.clone(), redact_environment_value(parts[1]));
+                        .insert(key.clone(), redact_environment_entry(&key, Some(parts[1])));
                 }
             }
 

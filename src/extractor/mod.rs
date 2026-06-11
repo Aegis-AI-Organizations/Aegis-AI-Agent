@@ -253,13 +253,85 @@ fn is_explicitly_ignored_host_process(name: &str) -> bool {
 
 static ENV_REDACTOR: OnceLock<Redactor> = OnceLock::new();
 
-pub fn redact_environment_value(value: &str) -> String {
-    let redacted = ENV_REDACTOR.get_or_init(Redactor::new).redact(value);
-    if redacted == value {
-        "REDACTED".to_string()
-    } else {
-        redacted
+pub fn redact_environment_entry(key: &str, value: Option<&str>) -> String {
+    let key_upper = key.to_ascii_uppercase();
+
+    if let Some(mock_value) = mock_sensitive_environment_value(&key_upper) {
+        return mock_value.to_string();
     }
+
+    let Some(value) = value else {
+        return "aegis-mock-value".to_string();
+    };
+
+    materialize_redacted_environment_value(
+        &ENV_REDACTOR.get_or_init(Redactor::new).redact(value),
+        value,
+    )
+}
+
+pub fn redact_environment_value(value: &str) -> String {
+    materialize_redacted_environment_value(
+        &ENV_REDACTOR.get_or_init(Redactor::new).redact(value),
+        value,
+    )
+}
+
+pub fn redact_environment_value_with_redactor(
+    key: &str,
+    value: &str,
+    redactor: &Redactor,
+) -> String {
+    let key_upper = key.to_ascii_uppercase();
+
+    if let Some(mock_value) = mock_sensitive_environment_value(&key_upper) {
+        return mock_value.to_string();
+    }
+
+    materialize_redacted_environment_value(&redactor.redact(value), value)
+}
+
+fn mock_sensitive_environment_value(key_upper: &str) -> Option<&'static str> {
+    if key_upper.contains("AWS_ACCESS_KEY_ID") || key_upper == "AWS_KEY" {
+        return Some("AKIA0000000000000000");
+    }
+
+    if key_upper.contains("AWS_SECRET_ACCESS_KEY") {
+        return Some("aegis-mock-aws-secret");
+    }
+
+    if key_upper.contains("PASSWORD")
+        || key_upper.contains("PASS")
+        || key_upper.contains("PWD")
+        || key_upper.contains("SECRET")
+        || key_upper.contains("PRIVATE_KEY")
+    {
+        return Some("aegis-mock-secret");
+    }
+
+    if key_upper.contains("API_KEY") || key_upper.ends_with("_KEY") {
+        return Some("aegis-mock-api-key");
+    }
+
+    if key_upper.contains("TOKEN") {
+        return Some("aegis-mock-token");
+    }
+
+    None
+}
+
+fn materialize_redacted_environment_value(redacted: &str, original: &str) -> String {
+    if redacted == original {
+        return original.to_string();
+    }
+
+    redacted
+        .replace("<REDACTED_AWS_KEY>", "AKIA0000000000000000")
+        .replace("<REDACTED_SECRET>", "aegis-mock-secret")
+        .replace("<REDACTED_PERSON>", "PRENOM_1 NOM_1")
+        .replace("<REDACTED_ORG>", "ORGANISATION_1")
+        .replace("<REDACTED_LOC>", "VILLE_1")
+        .replace("<REDACTED_IP>", "203.0.113.10")
 }
 
 pub fn parse_port_key(value: &str) -> Option<(i32, String)> {
