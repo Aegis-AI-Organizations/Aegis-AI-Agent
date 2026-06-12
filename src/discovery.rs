@@ -238,6 +238,7 @@ fn insert_container(containers: &mut BTreeMap<String, ProtoContainer>, container
 
 fn merge_container(existing: &mut ProtoContainer, incoming: &ProtoContainer) {
     existing.env.extend(incoming.env.clone());
+    existing.labels.extend(incoming.labels.clone());
 
     if existing.id.is_empty() {
         existing.id = incoming.id.clone();
@@ -264,6 +265,11 @@ fn merge_container(existing: &mut ProtoContainer, incoming: &ProtoContainer) {
             if !existing.sensitive_volumes.contains(volume) {
                 existing.sensitive_volumes.push(volume.clone());
             }
+        }
+    }
+    for network in &incoming.networks {
+        if !existing.networks.contains(network) {
+            existing.networks.push(network.clone());
         }
     }
 
@@ -303,6 +309,8 @@ fn proto_container_from_node(container: ContainerNode) -> ProtoContainer {
         image: container.image,
         image_sha256: container.image_sha256,
         env: container.env,
+        labels: container.labels,
+        networks: container.networks,
         processes: Vec::new(),
         ports,
         exposed_ports,

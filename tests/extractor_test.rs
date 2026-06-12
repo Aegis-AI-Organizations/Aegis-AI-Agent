@@ -30,6 +30,8 @@ impl TopologyExtractor for FakeTopologyExtractor {
                 image_sha256: None,
                 state: "running".to_string(),
                 env: BTreeMap::new(),
+                labels: BTreeMap::new(),
+                networks: Vec::new(),
                 exposed_ports: Vec::new(),
                 privileged: None,
                 run_as_root: None,
@@ -278,7 +280,8 @@ fn test_map_container_to_node_basic() {
     assert_eq!(node.name, "test-container");
     assert_eq!(node.image, "nginx:latest");
     assert_eq!(node.state, "running");
-    assert_eq!(node.env.get("label:version").unwrap(), "1.0");
+    assert_eq!(node.labels.get("version").unwrap(), "1.0");
+    assert!(node.env.is_empty());
 }
 
 #[test]
@@ -312,6 +315,8 @@ fn test_enrich_node_with_inspect() {
         image_sha256: None,
         state: "stat".to_string(),
         env: BTreeMap::new(),
+        labels: BTreeMap::new(),
+        networks: Vec::new(),
         exposed_ports: Vec::new(),
         privileged: None,
         run_as_root: None,

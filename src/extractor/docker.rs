@@ -259,12 +259,7 @@ pub fn map_container_to_node(
     let state = c.state.unwrap_or_else(|| "unknown".to_string());
     let image_sha256 = c.image_id;
 
-    let mut env = BTreeMap::new();
-    if let Some(labels) = c.labels {
-        for (k, v) in labels {
-            env.insert(format!("label:{}", k), v);
-        }
-    }
+    let labels = c.labels.unwrap_or_default().into_iter().collect();
 
     let mut exposed_ports = Vec::new();
     if let Some(ports) = c.ports {
@@ -289,7 +284,9 @@ pub fn map_container_to_node(
         image,
         image_sha256,
         state,
-        env,
+        env: BTreeMap::new(),
+        labels,
+        networks: Vec::new(),
         exposed_ports,
         privileged: None,
         run_as_root: None,
@@ -385,6 +382,19 @@ pub fn enrich_node_with_inspect(
                         .push(format!("{}:{}", source, destination));
                 }
             }
+        }
+    }
+
+    if let Some(network_settings) = inspect.network_settings {
+        if let Some(networks) = network_settings.networks {
+            let mut names = networks
+                .keys()
+                .map(|name| name.trim().to_string())
+                .filter(|name| !name.is_empty())
+                .collect::<Vec<_>>();
+            names.sort();
+            names.dedup();
+            node.networks = names;
         }
     }
 

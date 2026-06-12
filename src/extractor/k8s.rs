@@ -349,6 +349,8 @@ fn map_pod_container(
         image_sha256,
         state: "Unknown".to_string(),
         env: env_map,
+        labels: BTreeMap::new(),
+        networks: Vec::new(),
         exposed_ports,
         privileged,
         run_as_root,

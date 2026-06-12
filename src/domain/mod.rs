@@ -33,6 +33,12 @@ pub struct ContainerNode {
     pub state: String,
     /// Environment variables (key-value pairs).
     pub env: BTreeMap<String, String>,
+    /// Runtime labels attached to the container.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub labels: BTreeMap<String, String>,
+    /// Runtime network names the container is connected to.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub networks: Vec<String>,
     /// Exposed container ports or host bindings.
     pub exposed_ports: Vec<PortBindingNode>,
     /// Whether the container runs with elevated privileges.
@@ -189,6 +195,10 @@ pub struct ProtoContainer {
     pub image_sha256: Option<String>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub env: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub labels: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub networks: Vec<String>,
     pub processes: Vec<ProtoProcess>,
     pub ports: Vec<ProtoPort>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
