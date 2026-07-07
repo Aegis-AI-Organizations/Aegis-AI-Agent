@@ -288,7 +288,29 @@ pub fn redact_environment_value_with_redactor(
         return mock_value.to_string();
     }
 
+    if key_upper.ends_with("_URL") || key_upper == "DATABASE_URL" {
+        if let Some(redacted_url) = redact_connection_url_password(value) {
+            return redacted_url;
+        }
+    }
+
     materialize_redacted_environment_value(&redactor.redact(value), value)
+}
+
+fn redact_connection_url_password(value: &str) -> Option<String> {
+    let scheme_index = value.find("://")?;
+    let credentials_start = scheme_index + 3;
+    let relative_at = value[credentials_start..].find('@')?;
+    let at_index = credentials_start + relative_at;
+    let credentials = &value[credentials_start..at_index];
+    let username = credentials.split_once(':')?.0;
+
+    Some(format!(
+        "{}{}:aegis-mock-secret{}",
+        &value[..credentials_start],
+        username,
+        &value[at_index..]
+    ))
 }
 
 fn mock_sensitive_environment_value(key_upper: &str) -> Option<&'static str> {

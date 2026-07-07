@@ -60,6 +60,7 @@ fn test_network_topology_payload_serialization() {
             }],
         }],
         routes: Vec::new(),
+        database_schemas: Vec::new(),
     };
 
     let json = serde_json::to_string(&payload).unwrap();

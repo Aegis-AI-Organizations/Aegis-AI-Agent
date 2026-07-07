@@ -171,6 +171,78 @@ pub struct NetworkTopologyPayload {
     pub hosts: Vec<ProtoHost>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub routes: Vec<ProtoRoute>,
+    #[serde(
+        default,
+        rename = "databaseSchemas",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub database_schemas: Vec<DatabaseSchema>,
+}
+
+/// Database schema metadata discovered from application/runtime configuration.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct DatabaseSchema {
+    pub engine: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub port: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub database_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub username: Option<String>,
+    pub source_container_id: String,
+    pub source_container_name: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tables: Vec<DatabaseTable>,
+}
+
+/// Database table metadata. Populated when active schema introspection is available.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct DatabaseTable {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub columns: Vec<DatabaseColumn>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub indexes: Vec<DatabaseIndex>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub foreign_keys: Vec<DatabaseForeignKey>,
+}
+
+/// Database column metadata.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct DatabaseColumn {
+    pub name: String,
+    pub data_type: String,
+    pub nullable: bool,
+    pub primary_key: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default_value: Option<String>,
+}
+
+/// Database index metadata.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct DatabaseIndex {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub columns: Vec<String>,
+    pub unique: bool,
+}
+
+/// Database foreign key metadata.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct DatabaseForeignKey {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub columns: Vec<String>,
+    pub referenced_table: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub referenced_columns: Vec<String>,
 }
 
 /// JSON representation of `aegis.v2.Host`.

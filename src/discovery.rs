@@ -1,7 +1,7 @@
 use crate::client::AegisClient;
 use crate::config::AgentConfig;
 use crate::domain::{
-    ActiveResource, ContainerNode, HostNode, IngressBackendNode, IngressNode,
+    ActiveResource, ContainerNode, DatabaseSchema, HostNode, IngressBackendNode, IngressNode,
     NetworkTopologyPayload, PodNode, PortBindingNode, ProtoContainer, ProtoHost, ProtoPort,
     ProtoProcess, ProtoRoute, ServiceNode, SystemExtractor,
 };
@@ -169,17 +169,24 @@ pub fn build_network_topology_from_resources(
 ) -> NetworkTopologyPayload {
     let mut merged_containers = BTreeMap::new();
     let mut routes = BTreeMap::new();
+    let mut database_schemas = BTreeMap::new();
 
     for resource in resources {
         match resource {
             ActiveResource::Container(container) => {
                 let proto = proto_container_from_node(container);
+                if let Some(schema) = database_schema_from_container(&proto) {
+                    database_schemas.insert(database_schema_key(&schema), schema);
+                }
                 insert_routes(&mut routes, container_routes_from_proto_container(&proto));
                 insert_container(&mut merged_containers, proto);
             }
             ActiveResource::Pod(pod) => {
                 for container in pod.containers {
                     let proto = proto_container_from_node(container);
+                    if let Some(schema) = database_schema_from_container(&proto) {
+                        database_schemas.insert(database_schema_key(&schema), schema);
+                    }
                     insert_routes(&mut routes, container_routes_from_proto_container(&proto));
                     insert_container(&mut merged_containers, proto);
                 }
@@ -202,7 +209,110 @@ pub fn build_network_topology_from_resources(
             processes: processes.into_iter().map(proto_process_from_node).collect(),
         }],
         routes: routes.into_values().collect(),
+        database_schemas: database_schemas.into_values().collect(),
     }
+}
+
+fn database_schema_from_container(container: &ProtoContainer) -> Option<DatabaseSchema> {
+    let url = env_value(
+        &container.env,
+        &["DATABASE_URL", "POSTGRES_URL", "POSTGRESQL_URL"],
+    );
+    let parsed_url = url.and_then(parse_postgres_url);
+    let has_postgres_env = container.env.keys().any(|key| {
+        let normalized = key.to_ascii_uppercase();
+        normalized.starts_with("POSTGRES_") || normalized.starts_with("PG")
+    });
+    let has_postgres_image = container.image.to_ascii_lowercase().contains("postgres")
+        || container.image.to_ascii_lowercase().contains("postgis");
+
+    if !has_postgres_env && !has_postgres_image && parsed_url.is_none() {
+        return None;
+    }
+
+    let parsed = parsed_url.unwrap_or_default();
+    Some(DatabaseSchema {
+        engine: "postgresql".to_string(),
+        host: env_value(&container.env, &["POSTGRES_HOST", "PGHOST", "DB_HOST"])
+            .map(str::to_string)
+            .or(parsed.host),
+        port: env_value(&container.env, &["POSTGRES_PORT", "PGPORT", "DB_PORT"])
+            .and_then(|value| value.parse::<i32>().ok())
+            .or(parsed.port),
+        database_name: env_value(&container.env, &["POSTGRES_DB", "PGDATABASE", "DB_NAME"])
+            .map(str::to_string)
+            .or(parsed.database_name),
+        username: env_value(&container.env, &["POSTGRES_USER", "PGUSER", "DB_USER"])
+            .map(str::to_string)
+            .or(parsed.username),
+        source_container_id: container.id.clone(),
+        source_container_name: container.name.clone(),
+        tables: Vec::new(),
+    })
+}
+
+fn env_value<'a>(env: &'a BTreeMap<String, String>, keys: &[&str]) -> Option<&'a str> {
+    keys.iter()
+        .find_map(|key| env.get(*key).map(String::as_str))
+}
+
+#[derive(Default)]
+struct ParsedPostgresUrl {
+    host: Option<String>,
+    port: Option<i32>,
+    database_name: Option<String>,
+    username: Option<String>,
+}
+
+fn parse_postgres_url(value: &str) -> Option<ParsedPostgresUrl> {
+    let rest = value
+        .strip_prefix("postgres://")
+        .or_else(|| value.strip_prefix("postgresql://"))?;
+    let without_query = rest.split(['?', '#']).next().unwrap_or(rest);
+    let (credentials, host_path) = without_query
+        .rsplit_once('@')
+        .map(|(credentials, host_path)| (Some(credentials), host_path))
+        .unwrap_or((None, without_query));
+    let (host_port, database_name) = host_path
+        .split_once('/')
+        .map(|(host_port, database)| (host_port, non_empty(database)))
+        .unwrap_or((host_path, None));
+    let (host, port) = host_port
+        .rsplit_once(':')
+        .map(|(host, port)| (non_empty(host), port.parse::<i32>().ok()))
+        .unwrap_or((non_empty(host_port), None));
+    let username =
+        credentials.and_then(|value| value.split_once(':').map(|(user, _)| user).or(Some(value)));
+
+    Some(ParsedPostgresUrl {
+        host: host.map(str::to_string),
+        port,
+        database_name: database_name.map(str::to_string),
+        username: username.and_then(non_empty).map(str::to_string),
+    })
+}
+
+fn non_empty(value: &str) -> Option<&str> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed)
+    }
+}
+
+fn database_schema_key(schema: &DatabaseSchema) -> String {
+    format!(
+        "{}:{}:{}:{}:{}",
+        schema.engine,
+        schema.source_container_id,
+        schema.host.clone().unwrap_or_default(),
+        schema
+            .port
+            .map(|value| value.to_string())
+            .unwrap_or_default(),
+        schema.database_name.clone().unwrap_or_default()
+    )
 }
 
 pub fn redact_payload(payload: &mut NetworkTopologyPayload, redactor: &Redactor) {

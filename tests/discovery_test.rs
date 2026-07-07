@@ -194,6 +194,49 @@ fn test_build_network_topology_deduplicates_ports_and_routes() {
 }
 
 #[test]
+fn test_build_network_topology_exports_postgres_schema_target_from_env() {
+    let mut payload = build_network_topology_from_resources(
+        HostNode {
+            hostname: "host-1".to_string(),
+            os: "Linux".to_string(),
+            kernel: "6.1".to_string(),
+            uptime: 42,
+            total_ram: 1024,
+        },
+        Vec::new(),
+        vec![ActiveResource::Container(ContainerNode {
+            id: "api-container".to_string(),
+            name: "api".to_string(),
+            image: "api:latest".to_string(),
+            state: "running".to_string(),
+            env: BTreeMap::from([(
+                "DATABASE_URL".to_string(),
+                "postgres://app_user:secret-password@postgres.default.svc:5432/app_db?sslmode=disable"
+                    .to_string(),
+            )]),
+            ..Default::default()
+        })],
+    );
+
+    assert_eq!(payload.database_schemas.len(), 1);
+    let schema = &payload.database_schemas[0];
+    assert_eq!(schema.engine, "postgresql");
+    assert_eq!(schema.host.as_deref(), Some("postgres.default.svc"));
+    assert_eq!(schema.port, Some(5432));
+    assert_eq!(schema.database_name.as_deref(), Some("app_db"));
+    assert_eq!(schema.username.as_deref(), Some("app_user"));
+    assert_eq!(schema.source_container_id, "api-container");
+    assert_eq!(schema.source_container_name, "api");
+    assert!(schema.tables.is_empty());
+
+    redact_payload(&mut payload, &Redactor::new());
+    let json = serde_json::to_string(&payload).unwrap();
+    assert!(json.contains("databaseSchemas"));
+    assert!(!json.contains("secret-password"));
+    serde_json::from_str::<NetworkTopologyPayload>(&json).unwrap();
+}
+
+#[test]
 fn test_build_network_topology_merges_metadata_and_exports_k8s_routes() {
     let payload = build_network_topology_from_resources(
         HostNode {

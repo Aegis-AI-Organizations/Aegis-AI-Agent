@@ -37,3 +37,19 @@ fn test_redact_ip_address() {
     let redacted = redactor.redact(input);
     assert!(redacted.contains("<REDACTED_IP>"));
 }
+
+#[test]
+fn test_redact_connection_url_password() {
+    let redactor = Redactor::new();
+    let redacted = aegis_ai_agent::extractor::redact_environment_value_with_redactor(
+        "DATABASE_URL",
+        "postgres://app_user:secret-password@postgres.default.svc:5432/app_db",
+        &redactor,
+    );
+
+    assert_eq!(
+        redacted,
+        "postgres://app_user:aegis-mock-secret@postgres.default.svc:5432/app_db"
+    );
+    assert!(!redacted.contains("secret-password"));
+}
