@@ -354,6 +354,8 @@ fn map_pod_container(
         image_version,
         image_hash,
         image_sha256,
+        image_archive_ref: None,
+        image_archive_object: None,
         state: "Unknown".to_string(),
         env: env_map,
         labels: BTreeMap::new(),

@@ -304,6 +304,8 @@ pub fn map_container_to_node(
         image_version,
         image_hash,
         image_sha256,
+        image_archive_ref: None,
+        image_archive_object: None,
         state,
         env: BTreeMap::new(),
         labels,

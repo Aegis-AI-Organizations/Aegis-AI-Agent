@@ -34,6 +34,10 @@ pub struct ContainerNode {
     pub image_hash: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub image_sha256: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub image_archive_ref: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub image_archive_object: Option<String>,
     pub state: String,
     /// Environment variables (key-value pairs).
     pub env: BTreeMap<String, String>,
@@ -273,6 +277,10 @@ pub struct ProtoContainer {
     pub image_hash: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub image_sha256: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub image_archive_ref: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub image_archive_object: Option<String>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub env: BTreeMap<String, String>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]

@@ -9,10 +9,11 @@ use crate::extractor::{
     redact_environment_value_with_redactor, SysinfoExtractor, TopologyExtractor,
 };
 use crate::redaction::Redactor;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use std::collections::BTreeMap;
 use std::sync::Mutex;
 use std::time::Duration;
+use tokio::process::Command;
 use tokio::sync::mpsc;
 use tokio::time;
 use tracing::{error, info};
@@ -64,6 +65,10 @@ pub async fn start_discovery_loop(config: AgentConfig) -> Result<()> {
 
         match collect_topology(&sys_extractor).await {
             Ok(mut payload) => {
+                if let Err(e) = attach_local_image_archives(&config, &client, &mut payload).await {
+                    error!("Failed to export local image archive(s): {}", e);
+                }
+
                 // Apply redaction to all text fields in the topology
                 redact_payload(&mut payload, &redactor);
 
@@ -102,6 +107,104 @@ pub async fn start_discovery_loop(config: AgentConfig) -> Result<()> {
             Err(e) => error!("Topology collection failed: {}", e),
         }
     }
+}
+
+async fn attach_local_image_archives(
+    config: &AgentConfig,
+    client: &AegisClient,
+    payload: &mut NetworkTopologyPayload,
+) -> Result<()> {
+    if std::env::var("AEGIS_EXPORT_LOCAL_IMAGES").unwrap_or_else(|_| "true".to_string()) == "false"
+    {
+        return Ok(());
+    }
+
+    let mut exported = std::collections::BTreeMap::<String, (String, String)>::new();
+    for host in &mut payload.hosts {
+        for container in &mut host.containers {
+            let image = container.image.trim();
+            if !should_export_local_image(image) {
+                continue;
+            }
+            if let Some((archive_ref, object_name)) = exported.get(image).cloned() {
+                container.image_archive_ref = Some(archive_ref);
+                container.image_archive_object = Some(object_name);
+                continue;
+            }
+
+            let filename = format!(
+                "image_{}_{}.tar",
+                sanitize_archive_name(image),
+                chrono::Utc::now().timestamp()
+            );
+            let (url, object_name) = client.get_upload_url(config, &filename).await?;
+            let archive = docker_save_image(image).await?;
+            client.upload_payload(&url, archive).await?;
+            let archive_ref = format!("minio:{}", object_name);
+            exported.insert(
+                image.to_string(),
+                (archive_ref.clone(), object_name.clone()),
+            );
+            container.image_archive_ref = Some(archive_ref);
+            container.image_archive_object = Some(object_name);
+            info!("Exported local Docker image archive for {}", image);
+        }
+    }
+    Ok(())
+}
+
+async fn docker_save_image(image: &str) -> Result<Vec<u8>> {
+    let output = Command::new("docker")
+        .arg("save")
+        .arg(image)
+        .output()
+        .await
+        .context("failed to run docker save")?;
+    if !output.status.success() {
+        anyhow::bail!(
+            "docker save {} failed: {}",
+            image,
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    Ok(output.stdout)
+}
+
+fn should_export_local_image(image: &str) -> bool {
+    let image = image.trim();
+    if image.is_empty() || image.contains("@sha256:") {
+        return false;
+    }
+    let repository = image.split(':').next().unwrap_or(image);
+    if repository.contains('/') {
+        return false;
+    }
+    !matches!(
+        repository,
+        "alpine"
+            | "busybox"
+            | "debian"
+            | "ubuntu"
+            | "nginx"
+            | "postgres"
+            | "mysql"
+            | "mariadb"
+            | "redis"
+            | "mongo"
+            | "node"
+            | "python"
+            | "golang"
+            | "httpd"
+    )
+}
+
+fn sanitize_archive_name(value: &str) -> String {
+    value
+        .chars()
+        .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '-' })
+        .collect::<String>()
+        .trim_matches('-')
+        .to_string()
 }
 
 pub async fn collect_topology(sys_extractor: &SysinfoExtractor) -> Result<NetworkTopologyPayload> {
@@ -437,6 +540,8 @@ fn proto_container_from_node(container: ContainerNode) -> ProtoContainer {
         image_version: container.image_version,
         image_hash,
         image_sha256,
+        image_archive_ref: container.image_archive_ref,
+        image_archive_object: container.image_archive_object,
         env: container.env,
         labels: container.labels,
         networks: container.networks,
