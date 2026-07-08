@@ -3,8 +3,8 @@ use crate::domain::{
     SystemExtractor, TopologyExtractor,
 };
 use crate::extractor::{
-    is_root_user, looks_sensitive_volume, parse_port_key, redact_environment_entry,
-    should_include_runtime_container,
+    image_version_from_reference, is_root_user, looks_sensitive_volume, normalize_image_hash,
+    parse_port_key, redact_environment_entry, should_include_runtime_container,
 };
 use bollard::container::ListContainersOptions;
 use bollard::Docker;
@@ -177,6 +177,9 @@ impl SystemExtractor for DockerExtractor {
             if let Ok(inspect) = self.docker.inspect_container(&node.id, None).await {
                 enrich_node_with_inspect(node, inspect);
             }
+            if let Ok(image) = self.docker.inspect_image(&node.image).await {
+                enrich_node_with_image_inspect(node, image);
+            }
         }
 
         Ok(nodes)
@@ -207,6 +210,9 @@ impl TopologyExtractor for DockerExtractor {
         for node in &mut nodes {
             if let Ok(inspect) = self.docker.inspect_container(&node.id, None).await {
                 enrich_node_with_inspect(node, inspect);
+            }
+            if let Ok(image) = self.docker.inspect_image(&node.image).await {
+                enrich_node_with_image_inspect(node, image);
             }
         }
 
@@ -257,7 +263,9 @@ pub fn map_container_to_node(
     let name = normalize_container_name(&raw_name);
     let image = c.image.unwrap_or_else(|| "unknown".to_string());
     let state = c.state.unwrap_or_else(|| "unknown".to_string());
-    let image_sha256 = c.image_id;
+    let image_hash = normalize_image_hash(c.image_id.as_deref());
+    let image_sha256 = image_hash.clone();
+    let image_version = image_version_from_reference(&image);
 
     let labels = c.labels.unwrap_or_default().into_iter().collect();
 
@@ -282,6 +290,8 @@ pub fn map_container_to_node(
         id,
         name,
         image,
+        image_version,
+        image_hash,
         image_sha256,
         state,
         env: BTreeMap::new(),
@@ -314,23 +324,26 @@ pub fn enrich_node_with_inspect(
                         .insert(key.clone(), redact_environment_entry(&key, Some(parts[1])));
                 }
             }
+        }
 
-            node.run_as_root = is_root_user(config.user.as_deref());
-            if let Some(image) = config.image {
-                node.image = image;
+        node.run_as_root = is_root_user(config.user.as_deref());
+        if let Some(image) = config.image {
+            node.image = image;
+            if node.image_version.is_none() {
+                node.image_version = image_version_from_reference(&node.image);
             }
+        }
 
-            if let Some(exposed_ports) = config.exposed_ports {
-                for (port_key, _) in exposed_ports {
-                    if let Some((number, protocol)) = parse_port_key(&port_key) {
-                        node.exposed_ports.push(PortBindingNode {
-                            number,
-                            protocol,
-                            host_ip: None,
-                            host_port: None,
-                            source: Some("docker_exposed_ports".to_string()),
-                        });
-                    }
+        if let Some(exposed_ports) = config.exposed_ports {
+            for (port_key, _) in exposed_ports {
+                if let Some((number, protocol)) = parse_port_key(&port_key) {
+                    node.exposed_ports.push(PortBindingNode {
+                        number,
+                        protocol,
+                        host_ip: None,
+                        host_port: None,
+                        source: Some("docker_exposed_ports".to_string()),
+                    });
                 }
             }
         }
@@ -398,8 +411,41 @@ pub fn enrich_node_with_inspect(
         }
     }
 
+    if let Some(hash) = normalize_image_hash(inspect.image.as_deref()) {
+        if node.image_hash.is_none() {
+            node.image_hash = Some(hash.clone());
+        }
+        if node.image_sha256.is_none() {
+            node.image_sha256 = Some(hash);
+        }
+    }
+}
+
+pub fn enrich_node_with_image_inspect(
+    node: &mut ContainerNode,
+    image: bollard::models::ImageInspect,
+) {
+    if node.image_version.is_none() {
+        node.image_version = image.repo_tags.as_deref().and_then(|tags| {
+            tags.iter()
+                .find_map(|tag| image_version_from_reference(tag))
+        });
+    }
+
+    if node.image_hash.is_none() {
+        node.image_hash = image
+            .repo_digests
+            .as_deref()
+            .and_then(|digests| {
+                digests
+                    .iter()
+                    .find_map(|digest| normalize_image_hash(Some(digest)))
+            })
+            .or_else(|| normalize_image_hash(image.id.as_deref()));
+    }
+
     if node.image_sha256.is_none() {
-        node.image_sha256 = inspect.image;
+        node.image_sha256 = node.image_hash.clone();
     }
 }
 

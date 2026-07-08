@@ -3,8 +3,10 @@ use crate::domain::{
     IngressRuleNode, PodNode, PortBindingNode, ProcessNode, ServiceNode, ServicePortNode,
     SystemExtractor, TopologyExtractor,
 };
-use crate::extractor::should_include_k8s_namespace;
-use crate::extractor::{looks_sensitive_volume, redact_environment_entry};
+use crate::extractor::{
+    image_version_from_reference, looks_sensitive_volume, normalize_image_hash,
+    redact_environment_entry, should_include_k8s_namespace,
+};
 use k8s_openapi::api::core::v1::{Container, Pod, Service, Volume};
 use k8s_openapi::api::networking::v1::{Ingress, IngressBackend, IngressRule};
 use kube::{api::ListParams, Api, Client};
@@ -333,19 +335,24 @@ fn map_pod_container(
 
     let (privileged, run_as_root) = container_privileges(c, pod_security_context);
     let sensitive_volumes = collect_sensitive_volumes(c, pod_volumes);
-    let image_sha256 = status.and_then(|status| {
+    let image = c.image.clone().unwrap_or_else(|| "unknown".to_string());
+    let image_version = image_version_from_reference(&image);
+    let image_hash = status.and_then(|status| {
         status.container_statuses.as_ref().and_then(|statuses| {
             statuses
                 .iter()
                 .find(|container_status| container_status.name == c.name)
-                .map(|container_status| container_status.image_id.clone())
+                .and_then(|container_status| normalize_image_hash(Some(&container_status.image_id)))
         })
     });
+    let image_sha256 = image_hash.clone();
 
     let mut node = ContainerNode {
         id: String::new(),
         name: c.name.clone(),
-        image: c.image.clone().unwrap_or_else(|| "unknown".to_string()),
+        image,
+        image_version,
+        image_hash,
         image_sha256,
         state: "Unknown".to_string(),
         env: env_map,
@@ -362,7 +369,10 @@ fn map_pod_container(
             for cs in c_statuses {
                 if cs.name == c.name {
                     node.id = cs.container_id.clone().unwrap_or_default();
-                    node.image_sha256 = Some(cs.image_id.clone());
+                    if let Some(hash) = normalize_image_hash(Some(&cs.image_id)) {
+                        node.image_hash = Some(hash.clone());
+                        node.image_sha256 = Some(hash);
+                    }
                     node.state = format!("{:?}", cs.state);
                 }
             }

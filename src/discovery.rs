@@ -356,8 +356,20 @@ fn merge_container(existing: &mut ProtoContainer, incoming: &ProtoContainer) {
     if existing.image == "unknown" && incoming.image != "unknown" {
         existing.image = incoming.image.clone();
     }
+    if existing.image_version.is_none() {
+        existing.image_version = incoming.image_version.clone();
+    }
+    if existing.image_hash.is_none() {
+        existing.image_hash = incoming
+            .image_hash
+            .clone()
+            .or_else(|| incoming.image_sha256.clone());
+    }
     if existing.image_sha256.is_none() {
-        existing.image_sha256 = incoming.image_sha256.clone();
+        existing.image_sha256 = incoming
+            .image_sha256
+            .clone()
+            .or_else(|| incoming.image_hash.clone());
     }
     if existing.privileged.is_none() {
         existing.privileged = incoming.privileged;
@@ -413,11 +425,18 @@ fn proto_container_from_node(container: ContainerNode) -> ProtoContainer {
         .cloned()
         .collect::<Vec<_>>();
 
+    let image_hash = container
+        .image_hash
+        .or_else(|| container.image_sha256.clone());
+    let image_sha256 = container.image_sha256.or_else(|| image_hash.clone());
+
     let mut proto = ProtoContainer {
         id: normalize_container_id(&container.id),
         name: container.name,
         image: container.image,
-        image_sha256: container.image_sha256,
+        image_version: container.image_version,
+        image_hash,
+        image_sha256,
         env: container.env,
         labels: container.labels,
         networks: container.networks,

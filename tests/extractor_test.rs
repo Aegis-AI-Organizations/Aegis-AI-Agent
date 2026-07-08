@@ -1,8 +1,9 @@
 use aegis_ai_agent::extractor::{
-    docker, filter_host_processes, is_root_user, k8s, looks_sensitive_volume, parse_port_key,
-    redact_environment_entry, redact_environment_value, should_include_k8s_namespace,
-    should_include_runtime_container, ActiveResource, ContainerNode, PodNode, ProcessNode,
-    SysinfoExtractor, SystemExtractor, TopologyExtractor,
+    docker, filter_host_processes, image_version_from_reference, is_root_user, k8s,
+    looks_sensitive_volume, normalize_image_hash, parse_port_key, redact_environment_entry,
+    redact_environment_value, should_include_k8s_namespace, should_include_runtime_container,
+    ActiveResource, ContainerNode, PodNode, ProcessNode, SysinfoExtractor, SystemExtractor,
+    TopologyExtractor,
 };
 use k8s_openapi::api::core::v1::{
     Container, ContainerPort, HostPathVolumeSource, Pod, PodSecurityContext, PodSpec, PodStatus,
@@ -27,6 +28,8 @@ impl TopologyExtractor for FakeTopologyExtractor {
                 id: "container-1".to_string(),
                 name: "api".to_string(),
                 image: "api:latest".to_string(),
+                image_version: None,
+                image_hash: None,
                 image_sha256: None,
                 state: "running".to_string(),
                 env: BTreeMap::new(),
@@ -312,6 +315,8 @@ fn test_enrich_node_with_inspect() {
         id: "123".to_string(),
         name: "test".to_string(),
         image: "img".to_string(),
+        image_version: None,
+        image_hash: None,
         image_sha256: None,
         state: "stat".to_string(),
         env: BTreeMap::new(),
@@ -377,12 +382,32 @@ fn test_enrich_node_with_inspect_maps_runtime_security_metadata() {
 
     docker::enrich_node_with_inspect(&mut node, inspect);
     assert_eq!(node.image, "api:latest");
+    assert_eq!(node.image_hash.as_deref(), Some("sha256:abc"));
     assert_eq!(node.image_sha256.as_deref(), Some("sha256:abc"));
     assert_eq!(node.privileged, Some(true));
     assert_eq!(node.run_as_root, Some(true));
     assert_eq!(node.exposed_ports.len(), 1);
     assert_eq!(node.exposed_ports[0].host_port, Some(3000));
     assert_eq!(node.sensitive_volumes.len(), 2);
+}
+
+#[test]
+fn test_image_metadata_helpers_parse_versions_and_hashes() {
+    assert_eq!(
+        image_version_from_reference("registry.local:5000/nginx:1.21.0-alpine").as_deref(),
+        Some("registry.local:5000/nginx:1.21.0-alpine")
+    );
+    assert_eq!(image_version_from_reference("nginx:latest"), None);
+    assert_eq!(image_version_from_reference("nginx@sha256:abc"), None);
+    assert_eq!(
+        normalize_image_hash(Some("docker-pullable://nginx@sha256:abc")).as_deref(),
+        Some("sha256:abc")
+    );
+    assert_eq!(
+        normalize_image_hash(Some("sha256:def")).as_deref(),
+        Some("sha256:def")
+    );
+    assert_eq!(normalize_image_hash(Some("nginx:latest")), None);
 }
 
 #[test]

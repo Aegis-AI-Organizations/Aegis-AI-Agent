@@ -492,3 +492,45 @@ fn read_csv_env(primary: &str) -> Option<Vec<String>> {
 fn read_env_value(primary: &str) -> Option<String> {
     std::env::var(primary).ok()
 }
+
+pub fn image_version_from_reference(image: &str) -> Option<String> {
+    let image = image.trim();
+    if image.is_empty() || image == "unknown" || image.contains('@') {
+        return None;
+    }
+
+    let (name, tag) = image.rsplit_once(':')?;
+    if name
+        .rsplit_once('/')
+        .map(|(_, value)| value)
+        .unwrap_or(name)
+        .is_empty()
+        || tag.is_empty()
+        || tag == "latest"
+        || tag.contains('/')
+    {
+        return None;
+    }
+
+    Some(image.to_string())
+}
+
+pub fn normalize_image_hash(value: Option<&str>) -> Option<String> {
+    let value = value?.trim();
+    if value.is_empty() || value == "unknown" {
+        return None;
+    }
+
+    if let Some((_, digest)) = value.rsplit_once('@') {
+        return normalize_image_hash(Some(digest));
+    }
+
+    if let Some(index) = value.find("sha256:") {
+        let digest = &value[index..];
+        if digest.len() > "sha256:".len() {
+            return Some(digest.to_string());
+        }
+    }
+
+    None
+}
