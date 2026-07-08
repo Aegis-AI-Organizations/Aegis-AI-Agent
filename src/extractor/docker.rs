@@ -36,7 +36,11 @@ fn connect_to_docker_socket() -> Result<Docker, bollard::errors::Error> {
         docker_runtime_dir().as_deref(),
         read_current_docker_context(docker_home_dir().as_deref()).as_deref(),
     ) {
-        match Docker::connect_with_unix(&candidate, 120, API_DEFAULT_VERSION) {
+        match Docker::connect_with_unix(
+            docker_socket_path_from_candidate(&candidate).as_str(),
+            120,
+            API_DEFAULT_VERSION,
+        ) {
             Ok(docker) => return Ok(docker),
             Err(err) => last_error = Some(err),
         }
@@ -137,6 +141,13 @@ pub fn docker_socket_candidates(
     }
 
     deduped
+}
+
+pub fn docker_socket_path_from_candidate(candidate: &str) -> String {
+    candidate
+        .strip_prefix("unix://")
+        .unwrap_or(candidate)
+        .to_string()
 }
 
 impl SystemExtractor for DockerExtractor {

@@ -153,6 +153,18 @@ fn test_docker_socket_candidates_include_rootless_runtime_socket() {
 }
 
 #[test]
+fn test_docker_socket_path_from_candidate_strips_unix_scheme() {
+    assert_eq!(
+        docker::docker_socket_path_from_candidate("unix:///var/run/docker.sock"),
+        "/var/run/docker.sock"
+    );
+    assert_eq!(
+        docker::docker_socket_path_from_candidate("/run/user/1000/docker.sock"),
+        "/run/user/1000/docker.sock"
+    );
+}
+
+#[test]
 fn test_filter_host_processes_keeps_runtime_processes_and_drops_noise() {
     let filtered = filter_host_processes(vec![
         ProcessNode {
