@@ -137,9 +137,30 @@ async fn attach_local_image_archives(
                 sanitize_archive_name(image),
                 chrono::Utc::now().timestamp()
             );
-            let (url, object_name) = client.get_upload_url(config, &filename).await?;
-            let archive = docker_save_image(image).await?;
-            client.upload_payload(&url, archive).await?;
+            let (url, object_name) = match client.get_upload_url(config, &filename).await {
+                Ok(value) => value,
+                Err(e) => {
+                    error!(
+                        "Failed to get upload URL for local Docker image {}: {}",
+                        image, e
+                    );
+                    continue;
+                }
+            };
+            let archive = match docker_save_image(image).await {
+                Ok(value) => value,
+                Err(e) => {
+                    error!("Failed to export local Docker image {}: {}", image, e);
+                    continue;
+                }
+            };
+            if let Err(e) = client.upload_payload(&url, archive).await {
+                error!(
+                    "Failed to upload local Docker image archive for {}: {}",
+                    image, e
+                );
+                continue;
+            }
             let archive_ref = format!("minio:{}", object_name);
             exported.insert(
                 image.to_string(),
