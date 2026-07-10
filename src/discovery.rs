@@ -120,12 +120,14 @@ async fn attach_local_image_archives(
     }
 
     let mut exported = std::collections::BTreeMap::<String, (String, String)>::new();
+    let mut attempted_count = 0usize;
     for host in &mut payload.hosts {
         for container in &mut host.containers {
             let image = container.image.trim();
             if !should_export_local_image(image) {
                 continue;
             }
+            attempted_count += 1;
             if let Some((archive_ref, object_name)) = exported.get(image).cloned() {
                 container.image_archive_ref = Some(archive_ref);
                 container.image_archive_object = Some(object_name);
@@ -171,16 +173,26 @@ async fn attach_local_image_archives(
             info!("Exported local Docker image archive for {}", image);
         }
     }
+    if attempted_count > 0 {
+        info!(
+            "Local Docker image archive export summary: attempted_containers={}, exported_images={}",
+            attempted_count,
+            exported.len()
+        );
+    }
     Ok(())
 }
 
 async fn docker_save_image(image: &str) -> Result<Vec<u8>> {
-    let output = Command::new("docker")
-        .arg("save")
-        .arg(image)
-        .output()
-        .await
-        .context("failed to run docker save")?;
+    let output = match Command::new("docker").arg("save").arg(image).output().await {
+        Ok(output) => output,
+        Err(first_error) => Command::new("/usr/bin/docker")
+            .arg("save")
+            .arg(image)
+            .output()
+            .await
+            .with_context(|| format!("failed to run docker save: {first_error}"))?,
+    };
     if !output.status.success() {
         anyhow::bail!(
             "docker save {} failed: {}",
