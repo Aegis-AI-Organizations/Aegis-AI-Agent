@@ -41,6 +41,9 @@ pub struct ContainerNode {
     pub state: String,
     /// Environment variables (key-value pairs).
     pub env: BTreeMap<String, String>,
+    /// Unredacted environment variables kept in memory only for local read-only probes.
+    #[serde(default, skip_serializing, skip_deserializing)]
+    pub raw_env: BTreeMap<String, String>,
     /// Runtime labels attached to the container.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub labels: BTreeMap<String, String>,

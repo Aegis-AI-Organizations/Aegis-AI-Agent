@@ -244,10 +244,10 @@ pub async fn collect_topology(sys_extractor: &SysinfoExtractor) -> Result<Networ
     let host = sys_extractor.get_host_info().await?;
     let processes = sys_extractor.get_processes().await?;
     let resources = collect_runtime_resources().await;
+    let mut payload = build_network_topology_from_resources(host, processes, resources.clone());
+    enrich_database_schemas(&mut payload, &resources).await;
 
-    Ok(build_network_topology_from_resources(
-        host, processes, resources,
-    ))
+    Ok(payload)
 }
 
 async fn collect_runtime_resources() -> Vec<ActiveResource> {
@@ -359,8 +359,45 @@ fn database_schema_from_container(container: &ProtoContainer) -> Option<Database
         let normalized = key.to_ascii_uppercase();
         normalized.starts_with("POSTGRES_") || normalized.starts_with("PG")
     });
+    let mysql_url = env_value(&container.env, &["MYSQL_URL", "MARIADB_URL"]);
+    let parsed_mysql_url = mysql_url.and_then(parse_mysql_url);
+    let has_mysql_env = container.env.keys().any(|key| {
+        let normalized = key.to_ascii_uppercase();
+        normalized.starts_with("MYSQL_") || normalized.starts_with("MARIADB_")
+    });
     let has_postgres_image = container.image.to_ascii_lowercase().contains("postgres")
         || container.image.to_ascii_lowercase().contains("postgis");
+    let has_mysql_image = container.image.to_ascii_lowercase().contains("mysql")
+        || container.image.to_ascii_lowercase().contains("mariadb");
+
+    if has_mysql_env || has_mysql_image || mysql_url.is_some() {
+        let parsed = parsed_mysql_url.unwrap_or_default();
+        return Some(DatabaseSchema {
+            engine: if container.image.to_ascii_lowercase().contains("mariadb") {
+                "mariadb".to_string()
+            } else {
+                "mysql".to_string()
+            },
+            host: env_value(&container.env, &["MYSQL_HOST", "DB_HOST"])
+                .map(str::to_string)
+                .or(parsed.host),
+            port: env_value(&container.env, &["MYSQL_PORT", "DB_PORT"])
+                .and_then(|value| value.parse::<i32>().ok())
+                .or(parsed.port),
+            database_name: env_value(&container.env, &["MYSQL_DATABASE", "DB_NAME"])
+                .map(str::to_string)
+                .or(parsed.database_name),
+            username: env_value(
+                &container.env,
+                &["MYSQL_USER", "MYSQL_ROOT_USER", "DB_USER"],
+            )
+            .map(str::to_string)
+            .or(parsed.username),
+            source_container_id: container.id.clone(),
+            source_container_name: container.name.clone(),
+            tables: Vec::new(),
+        });
+    }
 
     if !has_postgres_env && !has_postgres_image && parsed_url.is_none() {
         return None;
@@ -387,6 +424,47 @@ fn database_schema_from_container(container: &ProtoContainer) -> Option<Database
     })
 }
 
+async fn enrich_database_schemas(
+    payload: &mut NetworkTopologyPayload,
+    resources: &[ActiveResource],
+) {
+    let mut enriched_schemas = BTreeMap::new();
+    for resource in resources {
+        match resource {
+            ActiveResource::Container(container) => {
+                enrich_database_schema_from_container(container, &mut enriched_schemas).await;
+            }
+            ActiveResource::Pod(pod) => {
+                for container in &pod.containers {
+                    enrich_database_schema_from_container(container, &mut enriched_schemas).await;
+                }
+            }
+            ActiveResource::Service(_) | ActiveResource::Ingress(_) => {}
+        }
+    }
+
+    for schema in &mut payload.database_schemas {
+        if let Some(enriched_schema) = enriched_schemas.remove(&database_schema_key(schema)) {
+            if !enriched_schema.tables.is_empty() {
+                schema.tables = enriched_schema.tables;
+            }
+        }
+    }
+}
+
+async fn enrich_database_schema_from_container(
+    container: &ContainerNode,
+    enriched_schemas: &mut BTreeMap<String, DatabaseSchema>,
+) {
+    let proto = proto_container_from_node(container.clone());
+    let Some(mut schema) = database_schema_from_container(&proto) else {
+        return;
+    };
+    let schema_key = database_schema_key(&schema);
+    crate::database::enrich_database_schema(&mut schema, &container.raw_env).await;
+    enriched_schemas.insert(schema_key, schema);
+}
+
 fn env_value<'a>(env: &'a BTreeMap<String, String>, keys: &[&str]) -> Option<&'a str> {
     keys.iter()
         .find_map(|key| env.get(*key).map(String::as_str))
@@ -404,6 +482,38 @@ fn parse_postgres_url(value: &str) -> Option<ParsedPostgresUrl> {
     let rest = value
         .strip_prefix("postgres://")
         .or_else(|| value.strip_prefix("postgresql://"))?;
+    let without_query = rest.split(['?', '#']).next().unwrap_or(rest);
+    let (credentials, host_path) = without_query
+        .rsplit_once('@')
+        .map(|(credentials, host_path)| (Some(credentials), host_path))
+        .unwrap_or((None, without_query));
+    let (host_port, database_name) = host_path
+        .split_once('/')
+        .map(|(host_port, database)| (host_port, non_empty(database)))
+        .unwrap_or((host_path, None));
+    let (host, port) = host_port
+        .rsplit_once(':')
+        .map(|(host, port)| (non_empty(host), port.parse::<i32>().ok()))
+        .unwrap_or((non_empty(host_port), None));
+    let username =
+        credentials.and_then(|value| value.split_once(':').map(|(user, _)| user).or(Some(value)));
+
+    Some(ParsedPostgresUrl {
+        host: host.map(str::to_string),
+        port,
+        database_name: database_name.map(str::to_string),
+        username: username.and_then(non_empty).map(str::to_string),
+    })
+}
+
+fn parse_mysql_url(value: &str) -> Option<ParsedPostgresUrl> {
+    let rest = value
+        .strip_prefix("mysql://")
+        .or_else(|| value.strip_prefix("mariadb://"))?;
+    parse_database_url_rest(rest)
+}
+
+fn parse_database_url_rest(rest: &str) -> Option<ParsedPostgresUrl> {
     let without_query = rest.split(['?', '#']).next().unwrap_or(rest);
     let (credentials, host_path) = without_query
         .rsplit_once('@')

@@ -85,6 +85,7 @@ fn test_active_resource_serialization() {
 
     let json = serde_json::to_string(&resource).unwrap();
     assert!(json.contains("container"));
+    assert!(!json.contains("raw_env"));
 
     let decoded: ActiveResource = serde_json::from_str(&json).unwrap();
     assert_eq!(decoded, resource);

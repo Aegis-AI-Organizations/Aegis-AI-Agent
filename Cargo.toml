@@ -23,6 +23,8 @@ tract-onnx = { version = "0.21.10", optional = true }
 tokenizers = { version = "0.21.0", optional = true }
 ndarray = { version = "0.16.1", optional = true }
 regex = "1.10"
+tokio-postgres = "0.7"
+mysql_async = { version = "0.34", default-features = false, features = ["default-rustls"] }
 
 [features]
 default = ["k8s", "docker", "redaction"]

@@ -313,9 +313,13 @@ fn map_pod_container(
     pod_volumes: &[Volume],
 ) -> ContainerNode {
     let mut env_map = BTreeMap::new();
+    let mut raw_env_map = BTreeMap::new();
     if let Some(envs) = &c.env {
         for e in envs {
             let value = redact_environment_entry(&e.name, e.value.as_deref());
+            if let Some(raw_value) = &e.value {
+                raw_env_map.insert(e.name.clone(), raw_value.clone());
+            }
             env_map.insert(e.name.clone(), value);
         }
     }
@@ -358,6 +362,7 @@ fn map_pod_container(
         image_archive_object: None,
         state: "Unknown".to_string(),
         env: env_map,
+        raw_env: raw_env_map,
         labels: BTreeMap::new(),
         networks: Vec::new(),
         exposed_ports,

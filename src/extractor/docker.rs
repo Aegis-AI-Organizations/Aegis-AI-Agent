@@ -308,6 +308,7 @@ pub fn map_container_to_node(
         image_archive_object: None,
         state,
         env: BTreeMap::new(),
+        raw_env: BTreeMap::new(),
         labels,
         networks: Vec::new(),
         exposed_ports,
@@ -333,6 +334,7 @@ pub fn enrich_node_with_inspect(
                 let parts: Vec<&str> = e.splitn(2, '=').collect();
                 if parts.len() == 2 {
                     let key = parts[0].to_string();
+                    node.raw_env.insert(key.clone(), parts[1].to_string());
                     node.env
                         .insert(key.clone(), redact_environment_entry(&key, Some(parts[1])));
                 }

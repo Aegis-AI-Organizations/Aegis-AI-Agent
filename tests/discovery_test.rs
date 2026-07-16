@@ -234,6 +234,40 @@ fn test_build_network_topology_exports_postgres_schema_target_from_env() {
 }
 
 #[test]
+fn test_build_network_topology_exports_mysql_schema_target_from_env() {
+    let payload = build_network_topology_from_resources(
+        HostNode {
+            hostname: "host-1".to_string(),
+            os: "Linux".to_string(),
+            kernel: "6.1".to_string(),
+            uptime: 42,
+            total_ram: 1024,
+        },
+        Vec::new(),
+        vec![ActiveResource::Container(ContainerNode {
+            id: "api-container".to_string(),
+            name: "api".to_string(),
+            image: "api:latest".to_string(),
+            state: "running".to_string(),
+            env: BTreeMap::from([(
+                "MYSQL_URL".to_string(),
+                "mysql://app_user:secret-password@mysql.default.svc:3306/app_db".to_string(),
+            )]),
+            ..Default::default()
+        })],
+    );
+
+    assert_eq!(payload.database_schemas.len(), 1);
+    let schema = &payload.database_schemas[0];
+    assert_eq!(schema.engine, "mysql");
+    assert_eq!(schema.host.as_deref(), Some("mysql.default.svc"));
+    assert_eq!(schema.port, Some(3306));
+    assert_eq!(schema.database_name.as_deref(), Some("app_db"));
+    assert_eq!(schema.username.as_deref(), Some("app_user"));
+    assert!(schema.tables.is_empty());
+}
+
+#[test]
 fn test_build_network_topology_merges_metadata_and_exports_k8s_routes() {
     let payload = build_network_topology_from_resources(
         HostNode {
