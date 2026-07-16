@@ -269,11 +269,15 @@ fn test_extractor_helpers_parse_ports_users_and_sensitive_values() {
     assert_eq!(redact_environment_value("plain-value"), "plain-value");
     assert_eq!(
         redact_environment_entry("DB_PASS", Some("secret123")),
-        "aegis-mock-secret"
+        "[REDACTED]"
     );
     assert_eq!(
         redact_environment_entry("POSTGRES_PASSWORD", Some("secret456")),
-        "aegis-mock-secret"
+        "[REDACTED]"
+    );
+    assert_eq!(
+        redact_environment_entry("BEARER_AUTH", Some("token-value")),
+        "[REDACTED]"
     );
     assert_eq!(
         redact_environment_entry("DB_HOST", Some("postgres")),
@@ -357,7 +361,7 @@ fn test_enrich_node_with_inspect() {
 
     docker::enrich_node_with_inspect(&mut node, inspect);
     assert_eq!(node.env.get("DB_USER").unwrap(), "admin");
-    assert_eq!(node.env.get("DB_PASS").unwrap(), "aegis-mock-secret");
+    assert_eq!(node.env.get("DB_PASS").unwrap(), "[REDACTED]");
 }
 
 #[test]
@@ -478,7 +482,7 @@ fn test_map_pod_to_node_redaction() {
 
     let node = k8s::map_pod_to_node(pod);
     let env = &node.containers[0].env;
-    assert_eq!(env.get("SECRET_KEY").unwrap(), "aegis-mock-secret");
+    assert_eq!(env.get("SECRET_KEY").unwrap(), "[REDACTED]");
 }
 
 #[test]

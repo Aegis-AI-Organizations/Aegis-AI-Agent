@@ -53,3 +53,23 @@ fn test_redact_connection_url_password() {
     );
     assert!(!redacted.contains("secret-password"));
 }
+
+#[test]
+fn test_sql_redaction_preserves_dump_syntax() {
+    let redactor = Redactor::new();
+    let input = "INSERT INTO users (full_name, email, jwt, aws_key, note) VALUES ('John Doe', 'john.doe@example.com', 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.signature', 'AKIA1234567890ABCDEF', 'kept');";
+
+    let redacted = redactor.redact_sql_line(input);
+
+    assert_eq!(redacted.matches('(').count(), input.matches('(').count());
+    assert_eq!(redacted.matches(')').count(), input.matches(')').count());
+    assert_eq!(redacted.matches('\'').count(), input.matches('\'').count());
+    assert!(redacted.starts_with("INSERT INTO users"));
+    assert!(redacted.ends_with(";"));
+    assert!(redacted.contains("VALUES"));
+    assert!(!redacted.contains("John Doe"));
+    assert!(!redacted.contains("john.doe@example.com"));
+    assert!(!redacted.contains("eyJhbGciOiJIUzI1NiJ9"));
+    assert!(!redacted.contains("AKIA1234567890ABCDEF"));
+    assert_eq!(redacted.matches("[REDACTED]").count(), 4);
+}

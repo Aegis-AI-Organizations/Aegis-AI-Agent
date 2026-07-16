@@ -252,12 +252,13 @@ fn is_explicitly_ignored_host_process(name: &str) -> bool {
 }
 
 static ENV_REDACTOR: OnceLock<Redactor> = OnceLock::new();
+pub const REDACTED_ENV_VALUE: &str = "[REDACTED]";
 
 pub fn redact_environment_entry(key: &str, value: Option<&str>) -> String {
     let key_upper = key.to_ascii_uppercase();
 
-    if let Some(mock_value) = mock_sensitive_environment_value(&key_upper) {
-        return mock_value.to_string();
+    if is_sensitive_environment_key(&key_upper) {
+        return REDACTED_ENV_VALUE.to_string();
     }
 
     let Some(value) = value else {
@@ -284,8 +285,8 @@ pub fn redact_environment_value_with_redactor(
 ) -> String {
     let key_upper = key.to_ascii_uppercase();
 
-    if let Some(mock_value) = mock_sensitive_environment_value(&key_upper) {
-        return mock_value.to_string();
+    if is_sensitive_environment_key(&key_upper) {
+        return REDACTED_ENV_VALUE.to_string();
     }
 
     if key_upper.ends_with("_URL") || key_upper == "DATABASE_URL" {
@@ -313,33 +314,11 @@ fn redact_connection_url_password(value: &str) -> Option<String> {
     ))
 }
 
-fn mock_sensitive_environment_value(key_upper: &str) -> Option<&'static str> {
-    if key_upper.contains("AWS_ACCESS_KEY_ID") || key_upper == "AWS_KEY" {
-        return Some("AKIA0000000000000000");
-    }
-
-    if key_upper.contains("AWS_SECRET_ACCESS_KEY") {
-        return Some("aegis-mock-aws-secret");
-    }
-
-    if key_upper.contains("PASSWORD")
-        || key_upper.contains("PASS")
-        || key_upper.contains("PWD")
-        || key_upper.contains("SECRET")
-        || key_upper.contains("PRIVATE_KEY")
-    {
-        return Some("aegis-mock-secret");
-    }
-
-    if key_upper.contains("API_KEY") || key_upper.ends_with("_KEY") {
-        return Some("aegis-mock-api-key");
-    }
-
-    if key_upper.contains("TOKEN") {
-        return Some("aegis-mock-token");
-    }
-
-    None
+pub fn is_sensitive_environment_key(key: &str) -> bool {
+    let key_upper = key.to_ascii_uppercase();
+    ["PASS", "SECRET", "TOKEN", "KEY", "AUTH"]
+        .iter()
+        .any(|needle| key_upper.contains(needle))
 }
 
 fn materialize_redacted_environment_value(redacted: &str, original: &str) -> String {
