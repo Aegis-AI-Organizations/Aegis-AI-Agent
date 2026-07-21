@@ -21,7 +21,7 @@ jobs:
           if [ -f Cargo.toml ]; then
             sudo apt-get update
             sudo apt-get install -y musl-tools
-            cargo build --verbose --target x86_64-unknown-linux-musl
+            cargo build --verbose --target x86_64-unknown-linux-musl --bin aegis-ai-agent --no-default-features --features k8s,docker
           else
             echo "No Cargo.toml, skipping"
           fi

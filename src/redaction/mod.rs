@@ -44,11 +44,13 @@ impl Redactor {
     }
 
     pub fn redact_sql_line(&self, input: &str) -> String {
-        let mut output = self.secret_scanner.redact_sql_line(input);
+        let output = self.secret_scanner.redact_sql_line(input);
 
         #[cfg(feature = "redaction")]
-        if let Some(engine) = &self.nlp_engine {
-            output = engine.redact(&output);
+        {
+            if let Some(engine) = &self.nlp_engine {
+                return engine.redact(&output);
+            }
         }
 
         output
