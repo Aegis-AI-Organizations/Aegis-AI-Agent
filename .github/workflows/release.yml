@@ -37,7 +37,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Build Windows Binary
-        run: cargo build --release --bin aegis-ai-agent
+        run: cargo build --release --bin aegis-ai-agent --no-default-features --features k8s,docker
 
       - name: Upload Windows Binary Artifact
         uses: actions/upload-artifact@v4
