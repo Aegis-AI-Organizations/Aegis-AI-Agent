@@ -26,9 +26,30 @@ jobs:
           name: aegis-ai-agent-static
           path: target/x86_64-unknown-linux-musl/release/aegis-ai-agent
 
+  build_windows_binary:
+    name: Build Windows Binary
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build Windows Binary
+        run: cargo build --release --bin aegis-ai-agent
+
+      - name: Upload Windows Binary Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aegis-ai-agent-windows
+          path: target/release/aegis-ai-agent.exe
+
   create_release:
     name: GitHub Auto-Release & Docker Push
-    needs: build_static_binary
+    needs:
+      - build_static_binary
+      - build_windows_binary
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -41,6 +62,12 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: aegis-ai-agent-static
+          path: ./
+
+      - name: Download Windows Binary Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: aegis-ai-agent-windows
           path: ./
 
       - name: Prepare Lowercase Image Name
@@ -78,6 +105,7 @@ jobs:
           name: Release ${{ steps.tag_gen.outputs.tag }}
           files: |
             aegis-ai-agent
+            aegis-ai-agent.exe
             install.sh
           generate_release_notes: true
 

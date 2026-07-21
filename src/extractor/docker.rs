@@ -30,14 +30,14 @@ impl DockerExtractor {
 fn connect_to_docker_socket() -> Result<Docker, bollard::errors::Error> {
     let mut last_error = None;
 
-    for candidate in docker_socket_candidates(
+    for candidate in docker_endpoint_candidates(
         std::env::var("DOCKER_HOST").ok().as_deref(),
         docker_home_dir().as_deref(),
         docker_runtime_dir().as_deref(),
         read_current_docker_context(docker_home_dir().as_deref()).as_deref(),
     ) {
-        match Docker::connect_with_unix(
-            docker_socket_path_from_candidate(&candidate).as_str(),
+        match Docker::connect_with_socket(
+            &docker_socket_path_from_candidate(&candidate),
             120,
             API_DEFAULT_VERSION,
         ) {
@@ -87,6 +87,28 @@ fn read_current_docker_context(home_dir: Option<&Path>) -> Option<String> {
 }
 
 pub fn docker_socket_candidates(
+    docker_host: Option<&str>,
+    home_dir: Option<&Path>,
+    runtime_dir: Option<&Path>,
+    current_context: Option<&str>,
+) -> Vec<String> {
+    unix_docker_socket_candidates(docker_host, home_dir, runtime_dir, current_context)
+}
+
+pub fn docker_endpoint_candidates(
+    docker_host: Option<&str>,
+    home_dir: Option<&Path>,
+    runtime_dir: Option<&Path>,
+    current_context: Option<&str>,
+) -> Vec<String> {
+    if cfg!(windows) {
+        windows_docker_pipe_candidates(docker_host)
+    } else {
+        unix_docker_socket_candidates(docker_host, home_dir, runtime_dir, current_context)
+    }
+}
+
+pub fn unix_docker_socket_candidates(
     docker_host: Option<&str>,
     home_dir: Option<&Path>,
     runtime_dir: Option<&Path>,
@@ -143,9 +165,35 @@ pub fn docker_socket_candidates(
     deduped
 }
 
+pub fn windows_docker_pipe_candidates(docker_host: Option<&str>) -> Vec<String> {
+    let mut candidates = Vec::new();
+
+    if let Some(host) = docker_host {
+        let host = host.trim();
+        if host.starts_with("npipe://")
+            || host.starts_with("//./pipe/")
+            || host.starts_with(r"\\.\pipe\")
+        {
+            candidates.push(host.to_string());
+        }
+    }
+
+    candidates.push("npipe:////./pipe/docker_engine".to_string());
+
+    let mut deduped = Vec::new();
+    for candidate in candidates {
+        if !deduped.contains(&candidate) {
+            deduped.push(candidate);
+        }
+    }
+
+    deduped
+}
+
 pub fn docker_socket_path_from_candidate(candidate: &str) -> String {
     candidate
         .strip_prefix("unix://")
+        .or_else(|| candidate.strip_prefix("npipe://"))
         .unwrap_or(candidate)
         .to_string()
 }

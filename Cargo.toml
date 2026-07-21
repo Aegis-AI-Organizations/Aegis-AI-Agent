@@ -18,7 +18,7 @@ sysinfo = "0.38.4"
 chrono = "0.4"
 kube = { version = "3.1.0", features = ["runtime", "client", "derive"], optional = true }
 k8s-openapi = { version = "0.27.1", features = ["v1_31"], optional = true }
-bollard = { version = "0.18.1", optional = true }
+bollard = { version = "0.18.1", features = ["pipe"], optional = true }
 tract-onnx = { version = "0.21.10", optional = true }
 tokenizers = { version = "0.21.0", optional = true }
 ndarray = { version = "0.16.1", optional = true }

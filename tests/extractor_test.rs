@@ -143,6 +143,27 @@ fn test_docker_socket_candidates_honor_docker_host_override() {
 }
 
 #[test]
+fn test_windows_docker_pipe_candidates_honor_docker_host_override() {
+    let candidates = docker::windows_docker_pipe_candidates(Some("npipe:////./pipe/custom_engine"));
+
+    assert_eq!(
+        candidates.first().map(String::as_str),
+        Some("npipe:////./pipe/custom_engine")
+    );
+    assert!(candidates.contains(&"npipe:////./pipe/docker_engine".to_string()));
+}
+
+#[test]
+fn test_windows_docker_pipe_candidates_default_to_docker_engine() {
+    let candidates = docker::windows_docker_pipe_candidates(None);
+
+    assert_eq!(
+        candidates,
+        vec!["npipe:////./pipe/docker_engine".to_string()]
+    );
+}
+
+#[test]
 fn test_docker_socket_candidates_include_rootless_runtime_socket() {
     let candidates = docker::docker_socket_candidates(
         None,
@@ -164,6 +185,10 @@ fn test_docker_socket_path_from_candidate_strips_unix_scheme() {
     assert_eq!(
         docker::docker_socket_path_from_candidate("/run/user/1000/docker.sock"),
         "/run/user/1000/docker.sock"
+    );
+    assert_eq!(
+        docker::docker_socket_path_from_candidate("npipe:////./pipe/docker_engine"),
+        "//./pipe/docker_engine"
     );
 }
 
