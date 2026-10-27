@@ -1,3 +1,4 @@
+use crate::agent::{recover_from_stale_credentials, SharedConfig};
 use crate::client::AegisClient;
 use crate::config::AgentConfig;
 use crate::domain::{
@@ -37,7 +38,7 @@ pub fn set_mock_scan_trigger(tx: mpsc::Sender<()>) {
     }
 }
 
-pub async fn start_discovery_loop(config: AgentConfig) -> Result<()> {
+pub async fn start_discovery_loop(shared: SharedConfig) -> Result<()> {
     let gateway_url = crate::config::get_gateway_url();
     let client = AegisClient::new(gateway_url);
     let redactor = Redactor::new();
@@ -63,6 +64,8 @@ pub async fn start_discovery_loop(config: AgentConfig) -> Result<()> {
             force_upload
         );
 
+        let config = shared.lock().await.clone();
+
         match collect_topology(&sys_extractor).await {
             Ok(mut payload) => {
                 if let Err(e) = attach_local_image_archives(&config, &client, &mut payload).await {
@@ -83,30 +86,68 @@ pub async fn start_discovery_loop(config: AgentConfig) -> Result<()> {
                 }
 
                 let filename = format!("topology_{}.json", chrono::Utc::now().timestamp());
-                match client.get_upload_url(&config, &filename).await {
-                    Ok((url, object_name)) => match serde_json::to_vec(&payload) {
-                        Ok(data) => {
-                            if let Err(e) = client.upload_payload(&url, data).await {
-                                error!("Failed to upload topology payload: {}", e);
-                            } else {
-                                info!("Topology uploaded successfully as {}", filename);
-                                last_payload = Some(payload);
-                                if let Err(e) = client
-                                    .update_status(&config, "UPLOAD_COMPLETE", Some(&object_name))
-                                    .await
-                                {
-                                    error!("Failed to notify status update UPLOAD_COMPLETE: {}", e);
-                                }
-                            }
-                        }
-                        Err(e) => error!("Failed to serialize topology: {}", e),
-                    },
-                    Err(e) => error!("Failed to get upload URL: {}", e),
+                if let Err(e) =
+                    upload_topology(&client, &shared, &config, &filename, &payload).await
+                {
+                    error!("Topology sync failed: {}", e);
+                    continue;
                 }
+                last_payload = Some(payload);
             }
             Err(e) => error!("Topology collection failed: {}", e),
         }
     }
+}
+
+/// Uploads one topology payload, re-registering and resyncing once if the
+/// Gateway rejects the agent's current credentials partway through — a
+/// standalone process could otherwise go up to 15 minutes (the next tick)
+/// without ever resyncing its topology after a credentials rejection.
+async fn upload_topology(
+    client: &AegisClient,
+    shared: &SharedConfig,
+    config: &AgentConfig,
+    filename: &str,
+    payload: &NetworkTopologyPayload,
+) -> Result<()> {
+    let data = serde_json::to_vec(payload).context("Failed to serialize topology")?;
+
+    let (url, object_name) = match client.get_upload_url(config, filename).await {
+        Ok(value) => value,
+        Err(e) => {
+            if let Some(fresh) =
+                recover_from_stale_credentials(shared, &config.agent_secret, &e).await
+            {
+                client.get_upload_url(&fresh, filename).await?
+            } else {
+                return Err(e).context("Failed to get upload URL");
+            }
+        }
+    };
+
+    client
+        .upload_payload(&url, data)
+        .await
+        .context("Failed to upload topology payload")?;
+    info!("Topology uploaded successfully as {}", filename);
+
+    let current = shared.lock().await.clone();
+    if let Err(e) = client
+        .update_status(&current, "UPLOAD_COMPLETE", Some(&object_name))
+        .await
+    {
+        if let Some(fresh) = recover_from_stale_credentials(shared, &current.agent_secret, &e).await
+        {
+            client
+                .update_status(&fresh, "UPLOAD_COMPLETE", Some(&object_name))
+                .await
+                .context("Failed to notify status update UPLOAD_COMPLETE after resync")?;
+        } else {
+            error!("Failed to notify status update UPLOAD_COMPLETE: {}", e);
+        }
+    }
+
+    Ok(())
 }
 
 async fn attach_local_image_archives(
